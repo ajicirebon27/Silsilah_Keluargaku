@@ -24,6 +24,7 @@ async function init() {
   setupModal();
   setupLaporanModal();
   setupDashboardModal();
+  setupJelajahModal();
 }
 
 async function loadData() {
@@ -293,6 +294,146 @@ function openDashboardModal() {
 
 function closeDashboardModal() {
   document.getElementById('dashboard-modal').style.display = 'none';
+}
+
+// ---------- Jelajah Keluarga (mode kartu, drill-down per keturunan) ----------
+// Alternatif dari tampilan pohon bergaris: 1 keluarga (1 orang + pasangan +
+// anak-anaknya) ditampilkan per layar, supaya tidak penuh sesak walau data
+// sudah banyak. `jelajahPath` menyimpan jalur dari leluhur sampai posisi
+// sekarang (dipakai untuk breadcrumb & tombol kembali).
+let jelajahPath = [];
+
+function setupJelajahModal() {
+  document.getElementById('btn-jelajah').addEventListener('click', openJelajahModal);
+  document.getElementById('jelajah-modal-close').addEventListener('click', closeJelajahModal);
+  document.getElementById('jelajah-modal').addEventListener('click', e => {
+    if (e.target.id === 'jelajah-modal') closeJelajahModal();
+  });
+}
+
+function openJelajahModal() {
+  const rootId = appSettings.rootPersonId;
+  const rootValid = rootId && allPeople.some(p => p.id === rootId);
+  if (rootValid) {
+    jelajahPath = [rootId];
+    renderJelajah();
+  } else {
+    jelajahPath = [];
+    renderJelajahPilihLeluhur();
+  }
+  document.getElementById('jelajah-modal').style.display = 'flex';
+}
+
+function closeJelajahModal() {
+  document.getElementById('jelajah-modal').style.display = 'none';
+}
+
+// Dipakai kalau admin belum menyetel "Keluarga Utama" -- tamu memilih dulu
+// mau mulai jelajah dari leluhur mana (orang yang belum tercatat orang tuanya).
+function renderJelajahPilihLeluhur() {
+  const leluhurList = allPeople.filter(p => {
+    const { ayah, ibu } = RelationRules.getParents(p.id, allPeople, allMarriages);
+    return !ayah && !ibu;
+  });
+  document.getElementById('jelajah-breadcrumb').innerHTML = '';
+  document.getElementById('jelajah-body').innerHTML = `
+    <p class="jelajah-muted">Pilih leluhur untuk mulai menjelajah:</p>
+    <div class="jelajah-list">
+      ${leluhurList.map(p => `
+        <button class="jelajah-item" onclick="jelajahMasuk('${p.id}')">
+          <span class="jelajah-item-name">${escapeHtml(p.nama)}</span>
+          <span class="jelajah-item-arrow">&rsaquo;</span>
+        </button>
+      `).join('') || '<p class="jelajah-muted">Belum ada data orang.</p>'}
+    </div>
+  `;
+}
+
+function jelajahMasuk(personId) {
+  jelajahPath.push(personId);
+  renderJelajah();
+}
+
+function jelajahKembali() {
+  jelajahPath.pop();
+  if (jelajahPath.length === 0) {
+    renderJelajahPilihLeluhur();
+  } else {
+    renderJelajah();
+  }
+}
+
+function jelajahKeBreadcrumb(index) {
+  jelajahPath = jelajahPath.slice(0, index + 1);
+  renderJelajah();
+}
+
+function renderJelajah() {
+  const personId = jelajahPath[jelajahPath.length - 1];
+  const person = allPeople.find(p => p.id === personId);
+  if (!person) { renderJelajahPilihLeluhur(); return; }
+
+  const crumbHtml = jelajahPath.map((id, i) => {
+    const p = allPeople.find(x => x.id === id);
+    const nama = p ? p.nama : '?';
+    const isLast = i === jelajahPath.length - 1;
+    return `<span class="jelajah-crumb${isLast ? ' jelajah-crumb-active' : ''}" onclick="jelajahKeBreadcrumb(${i})">${escapeHtml(nama)}</span>${isLast ? '' : '<span class="jelajah-crumb-sep">&rsaquo;</span>'}`;
+  }).join('');
+  document.getElementById('jelajah-breadcrumb').innerHTML = crumbHtml;
+
+  const marriagesOf = allMarriages
+    .filter(m => m.orangId1 === personId || m.orangId2 === personId)
+    .sort((a, b) => (a.urutanPasangan || 1) - (b.urutanPasangan || 1));
+
+  const isMale = person.jenisKelamin === 'Laki-laki';
+  const isFemale = person.jenisKelamin === 'Perempuan';
+  const partnerWord = isMale ? 'Istri' : (isFemale ? 'Suami' : 'Pasangan');
+  const isPoly = marriagesOf.length > 1;
+
+  let groupsHtml;
+  if (marriagesOf.length === 0) {
+    groupsHtml = '<p class="jelajah-muted">Belum ada data pasangan/anak untuk orang ini.</p>';
+  } else {
+    groupsHtml = marriagesOf.map((m, idx) => {
+      const partnerId = m.orangId1 === personId ? m.orangId2 : m.orangId1;
+      const partner = partnerId ? allPeople.find(p => p.id === partnerId) : null;
+      const label = partner
+        ? `${partnerWord}${isPoly ? ' ke-' + (idx + 1) : ''}: ${escapeHtml(partner.nama)}`
+        : `${partnerWord}${isPoly ? ' ke-' + (idx + 1) : ''}: <span class="jelajah-muted">belum tercatat</span>`;
+
+      const anakIds = m.childIds || [];
+      const anakHtml = anakIds.length
+        ? `<div class="jelajah-list">${anakIds.map(cid => {
+            const c = allPeople.find(p => p.id === cid);
+            if (!c) return '';
+            const jumlahAnak = RelationRules.getChildren(cid, allMarriages).length;
+            return `
+              <button class="jelajah-item" onclick="jelajahMasuk('${cid}')">
+                <span class="jelajah-item-name">${escapeHtml(c.nama)}</span>
+                <span class="jelajah-item-sub">${jumlahAnak ? jumlahAnak + ' anak' : 'belum ada anak tercatat'}</span>
+                <span class="jelajah-item-arrow">&rsaquo;</span>
+              </button>
+            `;
+          }).join('')}</div>`
+        : '<p class="jelajah-muted jelajah-noanak">Belum ada anak tercatat.</p>';
+
+      return `<div class="jelajah-group"><p class="jelajah-group-label">${label}</p>${anakHtml}</div>`;
+    }).join('');
+  }
+
+  const backBtn = jelajahPath.length > 1 || (jelajahPath.length === 1 && !appSettings.rootPersonId)
+    ? `<div class="jelajah-back-row"><button class="btn-link" onclick="jelajahKembali()">&larr; Kembali</button></div>`
+    : '';
+
+  document.getElementById('jelajah-body').innerHTML = `
+    <div class="jelajah-card ${isFemale ? 'jelajah-card-female' : ''}">
+      <div class="jelajah-card-name">${escapeHtml(person.nama)}</div>
+      <div class="jelajah-card-sub">${escapeHtml(person.jenisKelamin || '-')}</div>
+      <button class="btn-link jelajah-biodata-link" onclick="openDetail('${personId}')">Lihat biodata lengkap</button>
+    </div>
+    ${groupsHtml}
+    ${backBtn}
+  `;
 }
 
 const COMMENT_COOLDOWN_MS = 15000; // jeda minimal 15 detik antar kirim komentar dari browser yang sama
