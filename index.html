@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Silsilah Keluarga</title>
+<meta name="theme-color" content="#4F7CAC">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-title" id="app-title">Silsilah Keluarga</div>
+  <div class="topbar-actions">
+    <input type="text" id="search-input" placeholder="Cari nama..." class="search-box">
+    <button id="btn-dashboard" class="admin-link">Dashboard</button>
+    <button id="btn-laporan" class="admin-link">Laporan</button>
+    <a href="admin.html" class="admin-link" title="Masuk sebagai Admin">Admin</a>
+  </div>
+</header>
+
+<main>
+  <div id="tree-wrapper" class="tree-wrapper">
+    <div id="tree-container" class="tree-container"></div>
+  </div>
+
+  <div id="empty-state" class="empty-state" style="display:none">
+    <p>Belum ada data silsilah keluarga.</p>
+    <p class="empty-sub">Admin dapat mulai menambahkan data lewat halaman Admin.</p>
+  </div>
+
+  <div class="zoom-controls">
+    <button id="zoom-in" aria-label="Perbesar">+</button>
+    <button id="zoom-reset" aria-label="Reset tampilan">⤢</button>
+    <button id="zoom-out" aria-label="Perkecil">−</button>
+    <button id="tree-expand-all" aria-label="Perluas semua keturunan" title="Perluas Semua">&#8862;</button>
+    <button id="tree-collapse-all" aria-label="Ciutkan semua keturunan" title="Ciutkan Semua">&#8863;</button>
+  </div>
+</main>
+
+<!-- Modal detail orang -->
+<div id="detail-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <button class="modal-close" id="modal-close">&times;</button>
+    <div id="detail-content"></div>
+
+    <div class="comment-section">
+      <h3>Beri Komentar / Saran</h3>
+      <p class="comment-hint">Sampaikan jika ada informasi yang perlu diperbaiki.</p>
+      <form id="comment-form">
+        <input type="text" id="comment-name" placeholder="Nama kamu (wajib diisi)" required maxlength="80">
+        <textarea id="comment-text" placeholder="Tulis komentar atau saran..." required rows="3" maxlength="1000"></textarea>
+        <div id="comment-counter" class="comment-counter">0/1000</div>
+        <button type="submit" class="btn-primary">Kirim Komentar</button>
+      </form>
+      <div id="comment-feedback" class="comment-feedback"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Dashboard (ringkasan statistik) -->
+<div id="dashboard-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card modal-wide">
+    <button class="modal-close" id="dashboard-modal-close">&times;</button>
+    <h2>Dashboard Silsilah Keluarga</h2>
+    <p class="comment-hint">Ringkasan jumlah data yang tercatat pada pohon keluarga ini.</p>
+    <div id="dashboard-content"></div>
+  </div>
+</div>
+
+<!-- Modal Laporan (cari relasi keluarga) -->
+<div id="laporan-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card modal-wide">
+    <button class="modal-close" id="laporan-modal-close">&times;</button>
+    <h2>Laporan Hubungan Keluarga</h2>
+    <p class="comment-hint">Cari nama untuk melihat keterangan hubungan keluarganya.</p>
+
+    <input type="text" id="laporan-search" placeholder="Cari nama orang..." class="relasi-search-box">
+    <div id="laporan-search-results" class="relasi-results"></div>
+
+    <div id="laporan-detail" class="laporan-detail-wrap" style="display:none">
+      <div class="laporan-detail-topbar">
+        <button id="laporan-clear" class="btn-link">&larr; Ganti orang lain</button>
+      </div>
+      <div id="laporan-biodata-card"></div>
+      <div class="biodata-relasi-box">
+        <h3 class="biodata-relasi-title">Keterangan Hubungan Keluarga</h3>
+        <ul id="laporan-narrative-list" class="narrative-list"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/tree.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

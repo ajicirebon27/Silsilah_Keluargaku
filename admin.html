@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin - Silsilah Keluarga</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ================= LOGIN / DAFTAR ADMIN ================= -->
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-card">
+    <h1 id="auth-title">Masuk Admin</h1>
+    <p id="auth-subtitle" class="auth-subtitle">Masuk untuk mengelola data silsilah keluarga.</p>
+    <form id="auth-form">
+      <input type="email" id="auth-email" placeholder="Email" required>
+      <input type="password" id="auth-password" placeholder="Kata sandi (min. 6 karakter)" required minlength="6">
+      <button type="submit" class="btn-primary" id="auth-submit">Masuk</button>
+    </form>
+    <p id="auth-error" class="auth-error"></p>
+    <a href="index.html" class="back-link">&larr; Kembali ke tampilan publik</a>
+  </div>
+</div>
+
+<!-- ================= DASHBOARD ADMIN ================= -->
+<div id="admin-app" style="display:none">
+  <header class="topbar">
+    <div class="topbar-title">Panel Admin</div>
+    <nav class="admin-nav">
+      <button class="nav-btn active" data-tab="tab-dashboard">Dashboard</button>
+      <button class="nav-btn" data-tab="tab-orang">Data Orang</button>
+      <button class="nav-btn" data-tab="tab-laporan">Laporan</button>
+      <button class="nav-btn" data-tab="tab-komentar">
+        Komentar <span id="badge-komentar" class="badge" style="display:none">0</span>
+      </button>
+      <button class="nav-btn" data-tab="tab-pohon">Pohon Keluarga</button>
+      <button class="nav-btn" data-tab="tab-sampah">
+        Sampah <span id="badge-sampah" class="badge" style="display:none">0</span>
+      </button>
+      <button class="nav-btn" data-tab="tab-setting">Setting</button>
+    </nav>
+    <div class="topbar-actions">
+      <a href="index.html" class="admin-link">Lihat Publik</a>
+      <button id="logout-btn" class="admin-link">Keluar</button>
+    </div>
+  </header>
+
+  <main class="admin-main">
+
+    <!-- TAB: DASHBOARD -->
+    <section id="tab-dashboard" class="tab-panel active">
+      <h2>Dashboard</h2>
+      <p class="setting-hint">Ringkasan jumlah data silsilah keluarga yang tercatat di database ini.</p>
+      <div id="admin-dashboard-content"></div>
+
+      <div class="dashboard-recent-wrap">
+        <h3>Orang yang Baru Ditambahkan</h3>
+        <div id="admin-dashboard-recent"></div>
+      </div>
+    </section>
+
+    <!-- TAB 1: DATA ORANG -->
+    <section id="tab-orang" class="tab-panel">
+      <div class="panel-header">
+        <input type="text" id="admin-search" placeholder="Cari nama...">
+        <div class="relasi-filter-wrap">
+          <label for="admin-relasi-filter" class="relasi-filter-label">Status Relasi</label>
+          <select id="admin-relasi-filter" class="relasi-filter-select">
+            <option value="all">Semua Data</option>
+            <option value="sudah">✅ Sudah Terelasi</option>
+            <option value="belum">⚠️ Belum Terelasi</option>
+          </select>
+        </div>
+        <button id="btn-add-person" class="btn-primary">+ Tambah Orang</button>
+      </div>
+      <div id="relasi-filter-summary" class="relasi-filter-summary"></div>
+      <p id="gender-invalid-warning" class="gender-invalid-warning"></p>
+      <table class="admin-table">
+        <thead><tr><th>Nama</th><th>Jenis Kelamin</th><th>Lahir</th><th>Wafat</th><th>Aksi</th></tr></thead>
+        <tbody id="people-table-body"></tbody>
+      </table>
+      <div id="people-pagination" class="pagination-wrap"></div>
+    </section>
+
+    <!-- TAB: LAPORAN -->
+    <section id="tab-laporan" class="tab-panel">
+      <h2>Laporan Hubungan Keluarga</h2>
+      <p class="setting-hint">Cari nama untuk melihat keterangan hubungan keluarganya secara otomatis (anak ke berapa, kakak/adik dari siapa, pasangan, dan anak kandung).</p>
+
+      <input type="text" id="laporan-search" placeholder="Cari nama orang..." class="relasi-search-box">
+      <div id="laporan-search-results" class="relasi-results"></div>
+
+      <div id="laporan-detail" class="relasi-section laporan-detail-wrap" style="display:none;">
+        <div class="laporan-detail-topbar">
+          <button id="laporan-clear" class="btn-link">&larr; Ganti orang lain</button>
+        </div>
+        <div id="laporan-biodata-card"></div>
+        <div class="biodata-relasi-box">
+          <h3 class="biodata-relasi-title">Keterangan Hubungan Keluarga</h3>
+          <ul id="laporan-narrative-list" class="narrative-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: KOMENTAR -->
+    <section id="tab-komentar" class="tab-panel">
+      <h2>Komentar Masuk</h2>
+      <div id="comment-list"></div>
+    </section>
+
+    <!-- TAB: POHON KELUARGA (download) -->
+    <section id="tab-pohon" class="tab-panel">
+      <div class="panel-header">
+        <h2>Pohon Keluarga</h2>
+        <div>
+          <button id="btn-tree-expand-all" class="btn-secondary">Perluas Semua</button>
+          <button id="btn-tree-collapse-all" class="btn-secondary">Ciutkan Semua</button>
+          <button id="btn-download-jpg" class="btn-secondary">Unduh JPG</button>
+          <button id="btn-download-pdf" class="btn-secondary">Unduh PDF</button>
+        </div>
+      </div>
+      <p class="setting-hint">Klik lencana bulat <strong>&minus;</strong> di bawah kotak nama untuk menyembunyikan keturunannya, atau lencana <strong>+N</strong> untuk menampilkannya lagi.</p>
+      <div id="admin-tree-wrapper" class="tree-wrapper">
+        <div id="admin-tree-container" class="tree-container"></div>
+      </div>
+    </section>
+
+    <!-- TAB: SAMPAH -->
+    <section id="tab-sampah" class="tab-panel">
+      <h2>Sampah</h2>
+      <p class="setting-hint">Orang yang dihapus dari tab Data Orang muncul di sini dulu, bukan langsung hilang. Bisa dipulihkan kapan saja, atau dihapus permanen kalau memang sudah yakin.</p>
+      <div id="trash-list"></div>
+    </section>
+
+    <!-- TAB: SETTING -->
+    <section id="tab-setting" class="tab-panel">
+      <h2>Pengaturan Aplikasi</h2>
+      <div class="setting-block">
+        <label>Judul Aplikasi</label>
+        <input type="text" id="setting-title" placeholder="Silsilah Keluarga">
+        <button id="btn-save-title" class="btn-primary">Simpan Judul</button>
+      </div>
+      <div class="setting-block">
+        <label>Keluarga Utama untuk Tampilan Publik</label>
+        <p class="setting-hint">Pilih salah satu orang (misal leluhur paling awal) supaya tampilan
+          <strong>publik</strong> -- pohon keluarga, pencarian, Laporan, dan Dashboard -- HANYA
+          menampilkan orang ini beserta pasangan, orang tua/leluhurnya, dan seluruh keturunannya.
+          Keluarga lain yang sama sekali tidak berkerabat akan disembunyikan total dari tampilan publik
+          (data mereka tetap aman di database, tidak terhapus, dan tetap terlihat lengkap di sini
+          pada tampilan admin). Kosongkan pilihan untuk menampilkan semua keluarga seperti biasa.</p>
+        <div id="setting-root-person-select"></div>
+        <button id="btn-save-root-person" class="btn-primary">Simpan Keluarga Utama</button>
+      </div>
+      <div class="setting-block">
+        <label>Ganti Kata Sandi Admin</label>
+        <input type="password" id="setting-newpass" placeholder="Kata sandi baru (min. 6 karakter)" minlength="6">
+        <button id="btn-change-pass" class="btn-primary">Ubah Kata Sandi</button>
+      </div>
+      <div class="setting-block">
+        <label>Backup Data</label>
+        <p class="setting-hint">Unduh seluruh data (orang, pernikahan, komentar) sebagai file cadangan.</p>
+        <button id="btn-export" class="btn-secondary">Export Data (JSON)</button>
+      </div>
+      <div class="setting-block">
+        <label>Restore / Import Data</label>
+        <p class="setting-hint">Pulihkan data dari file backup JSON yang pernah diunduh. Data dengan ID yang sama akan <strong>ditimpa</strong>; data yang belum ada akan ditambahkan. Proses ini tidak bisa dibatalkan.</p>
+        <input type="file" id="import-file-input" accept="application/json" style="display:none">
+        <button id="btn-import" class="btn-secondary">Import Data (JSON)</button>
+      </div>
+      <p id="setting-feedback" class="comment-feedback"></p>
+    </section>
+
+  </main>
+</div>
+
+<!-- ================= FORM TAMBAH/EDIT ORANG (Tab 1 -- biodata saja) ================= -->
+<div id="person-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card modal-wide">
+    <button class="modal-close" id="person-modal-close">&times;</button>
+    <h2 id="person-form-title">Tambah Orang</h2>
+    <form id="person-form">
+      <input type="hidden" id="person-id">
+
+      <label>Nama <span class="req">*</span></label>
+      <input type="text" id="f-nama" required>
+      <div id="f-nama-duplicate-hint"></div>
+
+      <label>Jenis Kelamin <span class="req">*</span></label>
+      <select id="f-gender" required>
+        <option value="">Pilih...</option>
+        <option value="Laki-laki">Laki-laki</option>
+        <option value="Perempuan">Perempuan</option>
+      </select>
+
+      <label>Nama Panggilan/Alias (opsional)</label>
+      <input type="text" id="f-alias">
+
+      <label>Tanggal Lahir (opsional)</label>
+      <input type="date" id="f-tgl-lahir">
+
+      <label>Tempat Lahir (opsional)</label>
+      <input type="text" id="f-tempat-lahir">
+
+      <label>Tanggal Wafat (opsional)</label>
+      <input type="date" id="f-tgl-wafat">
+
+      <label>Agama (opsional)</label>
+      <select id="f-agama">
+        <option value="">Pilih...</option>
+        <option>Islam</option>
+        <option>Kristen</option>
+        <option>Katolik</option>
+        <option>Hindu</option>
+        <option>Buddha</option>
+        <option>Konghucu</option>
+        <option>Lainnya</option>
+      </select>
+
+      <label>Pekerjaan (opsional)</label>
+      <input type="text" id="f-pekerjaan">
+
+      <label>Alamat/Domisili (opsional)</label>
+      <input type="text" id="f-alamat">
+
+      <label>Nomor HP/Kontak (opsional)</label>
+      <input type="text" id="f-kontak">
+
+      <label>Foto (opsional)</label>
+      <input type="file" id="f-foto" accept="image/*">
+      <img id="f-foto-preview" style="display:none" class="foto-preview-mini">
+
+      <label>Catatan (opsional)</label>
+      <textarea id="f-catatan" rows="3" placeholder="Info tambahan yang belum tercakup di atas -- misalnya urutan anak ke berapa, cerita hidup, atau catatan lain."></textarea>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">Simpan</button>
+        <button type="button" id="btn-delete-person" class="btn-danger" style="display:none">Hapus Orang Ini</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ================= MODAL RELASI KELUARGA (dibuka dari tombol "Relasi" di Tab Data Orang) ================= -->
+<div id="relasi-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card modal-wide modal-relasi">
+    <button class="modal-close" id="relasi-modal-close">&times;</button>
+    <h2>Relasi Keluarga</h2>
+    <div class="relasi-selected-card">
+      <div id="relasi-selected-name" class="relasi-selected-name"></div>
+    </div>
+
+    <!-- Bagian Pasangan -->
+    <div class="relasi-section">
+      <h3>Pasangan</h3>
+      <p class="relasi-section-hint">Isi bagian ini jika ingin menjadikan orang ini sebagai istri/suami dari orang lain. Tidak perlu mengisi bagian "Orang Tua" di bawah untuk itu.</p>
+      <div id="relasi-pasangan-list"></div>
+      <div class="add-relation-row">
+        <div id="relasi-select-pasangan" style="flex:1; min-width:140px;"></div>
+        <button type="button" id="relasi-btn-add-pasangan" class="btn-primary">Simpan Pasangan</button>
+      </div>
+      <p id="relasi-pasangan-note" class="relasi-note"></p>
+    </div>
+
+    <!-- Bagian Orang Tua -->
+    <div class="relasi-section">
+      <h3>Orang Tua</h3>
+      <p class="relasi-section-hint">Isi bagian ini jika ingin mengisi siapa ayah/ibu kandung orang ini. Bagian ini terpisah dari "Pasangan" di atas -- tidak perlu memilih pasangan untuk menyimpan ini.</p>
+      <div class="relasi-parent-row">
+        <div>
+          <label>Ayah</label>
+          <div id="relasi-select-ayah"></div>
+        </div>
+        <div>
+          <label>Ibu</label>
+          <div id="relasi-select-ibu"></div>
+        </div>
+      </div>
+      <button type="button" id="relasi-btn-save-ortu" class="btn-primary">Simpan Orang Tua</button>
+      <p id="relasi-ortu-note" class="relasi-note"></p>
+    </div>
+
+    <!-- Bagian Anak (tampilan saja) -->
+    <div class="relasi-section">
+      <h3>Anak-anak (otomatis)</h3>
+      <div id="relasi-anak-list" class="relasi-note"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/tree.js"></script>
+<script src="js/searchable-select.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "Silsilah Keluarga",
+  "short_name": "Silsilah",
+  "description": "Aplikasi pohon keluarga / silsilah keturunan",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FAFBFC",
+  "theme_color": "#4F7CAC",
+  "orientation": "any",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
