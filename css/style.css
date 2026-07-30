@@ -198,6 +198,17 @@ body {
 .view-picker-label { font-size: clamp(16.5px, 4.6vw, 19px); font-weight: 700; color: var(--text-main); margin-bottom: 8px; }
 .view-picker-desc { font-size: clamp(13px, 3.4vw, 14px); color: var(--text-muted); line-height: 1.55; }
 
+/* Menu Utama pakai 4 kartu -- kontainer sedikit lebih lebar supaya di layar
+   besar bisa tersusun 2x2 atau 4 sejajar, tapi tetap 1 kolom penuh di HP
+   sempit (mengikuti aturan auto-fit yang sama seperti .view-picker-options). */
+.view-picker-options-4 { max-width: 760px; }
+
+/* Kartu "Admin" berupa tautan <a>, disamakan tampilannya dgn kartu tombol
+   lain (hilangkan garis bawah/warna biru bawaan link). */
+.view-picker-card-link { text-decoration: none; color: inherit; display: block; }
+
+.view-picker-backrow { width: 100%; max-width: 560px; text-align: left; margin-bottom: 10px; }
+
 #pohon-view {
   display: flex;
   flex-direction: column;

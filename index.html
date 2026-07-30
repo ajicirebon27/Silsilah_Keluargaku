@@ -12,20 +12,44 @@
 
 <header class="topbar">
   <div class="topbar-title" id="app-title">Silsilah Keluarga</div>
-  <div class="topbar-actions">
-    <button id="btn-jelajah" class="admin-link">Kartu</button>
-    <button id="btn-pohon-topbar" class="admin-link">Pohon</button>
-    <button id="btn-dashboard" class="admin-link">Dashboard</button>
-    <button id="btn-laporan" class="admin-link">Pencarian Data</button>
-    <a href="admin.html" class="admin-link admin-link-tab">Admin</a>
-  </div>
 </header>
 
 <main>
-  <!-- Layar pilihan tampilan: muncul pertama kali sebelum tamu masuk ke mode
-       kartu ATAU mode pohon -- supaya layar awal bersih, tidak langsung
-       menampilkan diagram pohon/node yang bisa terasa penuh/membingungkan. -->
+  <!-- LAYAR 1 -- Menu Utama: muncul pertama kali begitu program aktif.
+       4 kartu besar menggantikan tab-tab kecil yang dulu ada di topbar. -->
+  <div id="home-menu" class="view-picker" style="display:none">
+    <h1 class="view-picker-title">Selamat Datang</h1>
+    <p class="view-picker-sub">Pilih menu di bawah ini untuk melanjutkan.</p>
+    <div class="view-picker-options view-picker-options-4">
+      <button id="home-silsilah" class="view-picker-card">
+        <div class="view-picker-icon">🌳</div>
+        <div class="view-picker-label">Silsilah</div>
+        <div class="view-picker-desc">Jelajahi silsilah keluarga dalam bentuk kartu atau pohon.</div>
+      </button>
+      <button id="home-dashboard" class="view-picker-card">
+        <div class="view-picker-icon">📊</div>
+        <div class="view-picker-label">Dashboard</div>
+        <div class="view-picker-desc">Ringkasan jumlah data keluarga yang tercatat.</div>
+      </button>
+      <button id="home-laporan" class="view-picker-card">
+        <div class="view-picker-icon">🔍</div>
+        <div class="view-picker-label">Pencarian Data</div>
+        <div class="view-picker-desc">Cari nama seseorang &amp; lihat keterangan hubungan keluarganya.</div>
+      </button>
+      <a href="admin.html" class="view-picker-card view-picker-card-link">
+        <div class="view-picker-icon">🔐</div>
+        <div class="view-picker-label">Admin</div>
+        <div class="view-picker-desc">Masuk untuk mengelola data silsilah keluarga.</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- LAYAR 2 -- Pilihan Tampilan Silsilah: muncul setelah kartu "Silsilah"
+       di Menu Utama diklik -- baru di sini tamu memilih Kartu atau Pohon. -->
   <div id="view-picker" class="view-picker" style="display:none">
+    <div class="view-picker-backrow">
+      <button id="btn-viewpicker-kembali" class="btn-link">&larr; Kembali ke Menu Utama</button>
+    </div>
     <h1 class="view-picker-title">Pilih Tampilan Silsilah</h1>
     <p class="view-picker-sub">Pilih cara kamu ingin menjelajahi data keluarga di bawah ini.</p>
     <div class="view-picker-options">

@@ -27,14 +27,15 @@ async function init() {
   setupJelajahModal();
   setupViewPicker();
 
-  // Revisi: tampilan pertama yang dilihat pengunjung adalah LAYAR PILIHAN
-  // TAMPILAN (kartu atau pohon), bukan langsung salah satu mode -- dan bukan
-  // pula kanvas pohon/node yang otomatis kelihatan (baru dirender begitu
-  // tamu memilih mode Pohon di layar pilihan ini).
-  if (allPeople.length > 0) showViewPicker();
+  // Revisi: tampilan pertama yang dilihat pengunjung/admin/tamu adalah MENU
+  // UTAMA (4 kartu besar: Silsilah, Dashboard, Pencarian Data, Admin) --
+  // bukan langsung salah satu mode, dan bukan pula kanvas pohon/node yang
+  // otomatis kelihatan. Kartu "Silsilah" baru membawa ke layar pilihan
+  // Kartu/Pohon; pohon sendiri baru digambar begitu mode Pohon dipilih.
+  if (allPeople.length > 0) showHomeMenu();
 }
 
-// ---------- Layar Pilihan Tampilan (Kartu / Pohon) ----------
+// ---------- Menu Utama & Layar Pilihan Tampilan (Kartu / Pohon) ----------
 let treeRendered = false;
 
 function isRootFixed() {
@@ -43,15 +44,27 @@ function isRootFixed() {
 }
 
 function setupViewPicker() {
+  document.getElementById('home-silsilah').addEventListener('click', showSilsilahPicker);
+  document.getElementById('home-dashboard').addEventListener('click', openDashboardModal);
+  document.getElementById('home-laporan').addEventListener('click', openLaporanModal);
   document.getElementById('pick-kartu').addEventListener('click', showKartuView);
   document.getElementById('pick-pohon').addEventListener('click', showPohonView);
-  document.getElementById('btn-jelajah').addEventListener('click', showKartuView);
-  document.getElementById('btn-pohon-topbar').addEventListener('click', showPohonView);
-  document.getElementById('btn-pohon-kembali').addEventListener('click', showViewPicker);
+  document.getElementById('btn-viewpicker-kembali').addEventListener('click', showHomeMenu);
+  document.getElementById('btn-pohon-kembali').addEventListener('click', showSilsilahPicker);
 }
 
-function showViewPicker() {
+// Layar paling awal/utama -- 4 kartu menu.
+function showHomeMenu() {
   closeJelajahModal();
+  document.getElementById('view-picker').style.display = 'none';
+  document.getElementById('pohon-view').style.display = 'none';
+  document.getElementById('home-menu').style.display = 'flex';
+}
+
+// Layar ke-2, khusus kartu "Silsilah" -- pilih Kartu atau Pohon.
+function showSilsilahPicker() {
+  closeJelajahModal();
+  document.getElementById('home-menu').style.display = 'none';
   document.getElementById('pohon-view').style.display = 'none';
   document.getElementById('view-picker').style.display = 'flex';
 }
@@ -254,7 +267,6 @@ function closeDetail() {
 let laporanSelectedId = null;
 
 function setupLaporanModal() {
-  document.getElementById('btn-laporan').addEventListener('click', openLaporanModal);
   document.getElementById('laporan-modal-close').addEventListener('click', closeLaporanModal);
   document.getElementById('laporan-modal').addEventListener('click', e => {
     if (e.target.id === 'laporan-modal') closeLaporanModal();
@@ -314,7 +326,6 @@ function selectLaporanPerson(id) {
 
 // ---------- Modal Dashboard (ringkasan statistik) ----------
 function setupDashboardModal() {
-  document.getElementById('btn-dashboard').addEventListener('click', openDashboardModal);
   document.getElementById('dashboard-modal-close').addEventListener('click', closeDashboardModal);
   document.getElementById('dashboard-modal').addEventListener('click', e => {
     if (e.target.id === 'dashboard-modal') closeDashboardModal();
@@ -370,9 +381,9 @@ let jelajahCurrentPickerEntries = [];  // entry level-leluhur yg sedang tampil s
 let jelajahShowChildren = false;
 
 function setupJelajahModal() {
-  document.getElementById('jelajah-modal-close').addEventListener('click', showViewPicker);
+  document.getElementById('jelajah-modal-close').addEventListener('click', showSilsilahPicker);
   document.getElementById('jelajah-modal').addEventListener('click', e => {
-    if (e.target.id === 'jelajah-modal') showViewPicker();
+    if (e.target.id === 'jelajah-modal') showSilsilahPicker();
   });
 }
 
@@ -487,7 +498,7 @@ function jelajahBukaAnak() {
 function jelajahKembali() {
   const sudahDiLevelAwal = isRootFixed() ? jelajahPath.length <= 1 : jelajahPath.length <= 0;
   if (sudahDiLevelAwal) {
-    showViewPicker();
+    showSilsilahPicker();
     return;
   }
   jelajahPath.pop();
