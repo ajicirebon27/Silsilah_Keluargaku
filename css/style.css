@@ -1,28 +1,29 @@
 /* =====================================================================
-   TEMA: Liquid Glass -- hijau transparan bergaya "gelas kaca" (glassmorphism)
+   TEMA: Liquid Glass -- biru transparan bergaya "gelas kaca" (glassmorphism)
    Catatan: nama variabel lama (--blue-*, --green-*) sengaja dipertahankan
    supaya seluruh file lain (tree.js, admin.js, admin.html) otomatis ikut
    berubah tanpa perlu disentuh satu per satu -- hanya NILAI warnanya yang
-   diganti ke palet hijau kaca + efek blur transparan (backdrop-filter).
-   --blue-* dipakai sbg aksen "pria" (kini: teal/emerald tua), --green-*
-   dipakai sbg aksen "wanita" (kini: hijau lime hangat) -- keduanya masih
-   dalam keluarga hijau supaya seluruh tema tetap terasa hijau menyeluruh.
+   diganti. --blue-* = aksen utama & pria (biru), --green-* = aksen
+   sekunder & wanita (rose/pink hangat, supaya tetap beda dgn biru).
+   Permukaan kartu ("gelas") sengaja dibuat LEBIH PUTIH/terang (opacity
+   lebih tinggi) & teks TIDAK memakai hitam pekat, supaya tetap kontras
+   dan jelas terbaca, bukan hanya sekadar bernuansa gelap.
    ===================================================================== */
 :root {
-  --blue-soft: #34D399;   /* emerald lembut -- aksen umum & pria */
-  --blue-deep: #0F766E;   /* teal tua -- aksen utama, tombol primer, teks aksen */
-  --blue-pale: rgba(20, 184, 166, 0.14);  /* teal sangat pucat -- latar kartu/hover */
-  --green-soft: #84CC16;  /* hijau lime hangat -- aksen sekunder & wanita */
-  --green-deep: #4D7C0F;  /* hijau lime tua -- aksen sekunder, garis anak */
-  --green-pale: rgba(132, 204, 22, 0.14); /* hijau lime pucat -- latar kartu/hover sekunder */
-  --bg: #E7F5EF;          /* dasar hijau mint lembut, latar utama */
-  --surface: rgba(255, 255, 255, 0.55);  /* "gelas" transparan -- dipakai bareng --glass-blur */
-  --text-main: #133226;
-  --text-muted: #4B6357;
-  --border: rgba(255, 255, 255, 0.45);
+  --blue-soft: #60A5FA;   /* biru cerah lembut -- aksen umum & pria */
+  --blue-deep: #1D4ED8;   /* biru tua -- aksen utama, tombol primer, teks aksen */
+  --blue-pale: rgba(37, 99, 235, 0.13);  /* biru sangat pucat -- latar kartu/hover */
+  --green-soft: #F472B6;  /* rose hangat -- aksen sekunder & wanita */
+  --green-deep: #BE185D;  /* rose tua -- aksen sekunder, garis anak */
+  --green-pale: rgba(244, 114, 182, 0.13); /* rose pucat -- latar kartu/hover sekunder */
+  --bg: #EAF2FC;          /* dasar biru langit sangat lembut */
+  --surface: rgba(255, 255, 255, 0.72);  /* "gelas" transparan tapi tetap putih terang, jelas terbaca */
+  --text-main: #1E293B;   /* slate gelap -- BUKAN hitam pekat, tetap kontras & nyaman dibaca */
+  --text-muted: #5B6B85;
+  --border: rgba(255, 255, 255, 0.55);
   --danger: #C0685C;
   --radius: 16px;
-  --shadow: 0 8px 28px rgba(15, 118, 110, 0.14);
+  --shadow: 0 8px 28px rgba(29, 78, 216, 0.14);
   --glass-blur: 18px;
 }
 
@@ -38,22 +39,22 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text-main);
   background-color: var(--bg);
-  /* "Gelembung" kaca hijau blur di latar, seperti efek liquid glass */
+  /* "Gelembung" kaca biru blur di latar, seperti efek liquid glass */
   background-image:
-    radial-gradient(circle at 12% 18%, rgba(16, 185, 129, 0.38), transparent 42%),
-    radial-gradient(circle at 88% 12%, rgba(13, 148, 136, 0.32), transparent 46%),
-    radial-gradient(circle at 78% 88%, rgba(5, 150, 105, 0.28), transparent 42%),
-    radial-gradient(circle at 15% 92%, rgba(132, 204, 22, 0.22), transparent 40%),
-    linear-gradient(160deg, #DFF5EC 0%, #D6F2E8 45%, #E4F7EF 100%);
+    radial-gradient(circle at 12% 18%, rgba(59, 130, 246, 0.35), transparent 42%),
+    radial-gradient(circle at 88% 12%, rgba(14, 165, 233, 0.30), transparent 46%),
+    radial-gradient(circle at 78% 88%, rgba(37, 99, 235, 0.26), transparent 42%),
+    radial-gradient(circle at 15% 92%, rgba(99, 102, 241, 0.20), transparent 40%),
+    linear-gradient(160deg, #DCEBFB 0%, #D6E8FA 45%, #E7F1FD 100%);
   background-attachment: fixed;
   background-size: cover;
   min-height: 100vh;
   min-height: 100dvh;
 }
 
-/* Kartu/permukaan "kaca": blur di belakangnya supaya warna latar hijau
-   tembus samar-samar di baliknya (liquid glass effect). Ditempel ke semua
-   elemen yang memakai var(--surface) sbg latar. */
+/* Kartu/permukaan "kaca": blur di belakangnya supaya warna latar biru
+   tembus samar-samar di baliknya (liquid glass effect), tapi permukaan
+   tetap didominasi warna putih terang supaya isi form/teks jelas terlihat. */
 .topbar, .admin-link, .zoom-controls button, .view-picker-card,
 .modal-card, .jelajah-card-sm, .jelajah-poly-tag, .jelajah-subcard,
 .auth-card, .admin-table, .setting-block, .comment-card, .relasi-result-item,
@@ -255,7 +256,7 @@ body {
 /* ---------- Modal ---------- */
 .modal-overlay {
   position: fixed; inset: 0;
-  background: rgba(6, 54, 43, 0.42);
+  background: rgba(15, 23, 42, 0.40);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
@@ -265,15 +266,15 @@ body {
 .modal-card {
   background: var(--surface);
   border-radius: var(--radius);
-  padding: 28px;
-  max-width: 420px;
+  padding: 30px;
+  max-width: 480px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  box-shadow: 0 8px 30px rgba(29, 78, 216, 0.16);
 }
-.modal-wide { max-width: 560px; }
+.modal-wide { max-width: 660px; }
 #detail-modal { z-index: 200; }
 
 /* ---------- Jelajah Keluarga (mode kartu / drill-down) ---------- */
@@ -408,14 +409,16 @@ body {
 form input[type=text], form input[type=email], form input[type=password],
 form input[type=date], form input[type=file], form select, form textarea {
   width: 100%;
-  padding: 10px 12px;
-  margin-bottom: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 10px;
+  font-size: 15px;
+  color: var(--text-main);
   font-family: inherit;
 }
-form label { font-size: 13px; font-weight: 500; color: var(--text-muted); display: block; margin-bottom: 4px; }
+form label { font-size: 13.5px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 5px; }
 .req { color: var(--danger); }
 
 .btn-primary {
@@ -441,9 +444,9 @@ form label { font-size: 13px; font-weight: 500; color: var(--text-muted); displa
   min-height: 100vh; min-height: 100dvh;
   display: flex; align-items: center; justify-content: center;
   background:
-    radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.35), transparent 45%),
-    radial-gradient(circle at 85% 80%, rgba(13, 148, 136, 0.35), transparent 45%),
-    linear-gradient(135deg, #CDEFE2, #E4F7EF);
+    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.32), transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(14, 165, 233, 0.32), transparent 45%),
+    linear-gradient(135deg, #D6E8FA, #E7F1FD);
   padding: 16px;
 }
 .auth-card {
@@ -481,7 +484,7 @@ form label { font-size: 13px; font-weight: 500; color: var(--text-muted); displa
 .admin-table th { background: var(--blue-pale); color: var(--blue-deep); font-weight: 600; }
 .empty-row, .empty-row-sm { color: var(--text-muted); text-align: center; padding: 16px; font-size: 13px; }
 
-.setting-block { background: var(--surface); padding: 18px; border-radius: var(--radius); margin-bottom: 16px; box-shadow: var(--shadow); max-width: 420px; }
+.setting-block { background: var(--surface); padding: 18px; border-radius: var(--radius); margin-bottom: 16px; box-shadow: var(--shadow); max-width: 480px; }
 .setting-block label { margin-bottom: 8px; }
 .setting-hint { color: var(--text-muted); font-size: 12px; margin: -4px 0 10px; }
 
@@ -510,8 +513,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 h2, h3 { color: var(--text-main); }
 
 /* ---------- Tab Relasi Keluarga ---------- */
-.relasi-search-box { width: 100%; max-width: 420px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; margin-bottom: 8px; }
-.relasi-results { max-width: 420px; margin-bottom: 16px; }
+.relasi-search-box { width: 100%; max-width: 480px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; margin-bottom: 8px; }
+.relasi-results { max-width: 480px; margin-bottom: 16px; }
 .relasi-result-item { background: var(--surface); padding: 10px 14px; border-radius: 8px; margin-bottom: 4px; cursor: pointer; box-shadow: var(--shadow); font-size: 14px; }
 .relasi-result-item:hover { background: var(--blue-pale); }
 .relasi-result-sub { color: var(--text-muted); font-size: 12px; }
@@ -659,7 +662,7 @@ h2, h3 { color: var(--text-main); }
 .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ---------- Modal Relasi Keluarga ---------- */
-.modal-relasi { max-width: 700px; }
+.modal-relasi { max-width: 780px; }
 
 /* ---------- Searchable Select (combobox dgn pencarian) ---------- */
 .ss-root { position: relative; }
@@ -782,7 +785,7 @@ h2, h3 { color: var(--text-main); }
    sempit atau landscape lebar) memakai satuan relatif (vw/%) dgn batas
    atas max-width, jadi tidak pernah lebih sempit/lebar dari yang wajar
    di kedua orientasi. */
-.modal-card, .auth-card { width: min(94vw, 420px); }
-.modal-wide { width: min(94vw, 560px); }
-.modal-relasi { width: min(94vw, 700px); }
+.modal-card, .auth-card { width: min(95vw, 480px); }
+.modal-wide { width: min(96vw, 660px); }
+.modal-relasi { width: min(96vw, 780px); }
 
