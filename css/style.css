@@ -1,21 +1,25 @@
 /* =====================================================================
-   TEMA: biru + hijau + putih, soft & tenang
+   TEMA: putih soft & elegan (slate + soft gold), modern & lembut
+   Catatan: nama variabel lama (--blue-*, --green-*) sengaja dipertahankan
+   supaya seluruh file lain (tree.js, admin.js, admin.html) otomatis ikut
+   berubah tanpa perlu disentuh satu per satu -- hanya NILAI warnanya yang
+   diganti ke palet baru.
    ===================================================================== */
 :root {
-  --blue-soft: #6E9BC7;
-  --blue-deep: #4F7CAC;
-  --blue-pale: #E8F1FA;
-  --green-soft: #7FB396;
-  --green-deep: #4E8B6C;
-  --green-pale: #EAF6EE;
-  --bg: #FAFBFC;
+  --blue-soft: #8C9AAE;   /* slate lembut -- aksen umum & pria */
+  --blue-deep: #566072;   /* slate tua -- aksen utama, tombol primer, teks aksen */
+  --blue-pale: #F1F3F6;   /* slate sangat pucat -- latar kartu/hover */
+  --green-soft: #CBAE84;  /* gold hangat lembut -- aksen sekunder & wanita */
+  --green-deep: #A8824F;  /* gold tua -- aksen sekunder, garis anak */
+  --green-pale: #FBF4E9;  /* krem pucat -- latar kartu/hover sekunder */
+  --bg: #FAF9F7;          /* putih hangat, soft */
   --surface: #FFFFFF;
-  --text-main: #2E3A46;
-  --text-muted: #6B7A87;
-  --border: #E1E8ED;
-  --danger: #D6756B;
-  --radius: 12px;
-  --shadow: 0 2px 10px rgba(79, 124, 172, 0.08);
+  --text-main: #2B2A28;
+  --text-muted: #85817B;
+  --border: #EAE6E0;
+  --danger: #C0685C;
+  --radius: 14px;
+  --shadow: 0 4px 20px rgba(43, 42, 40, 0.06);
 }
 
 * { box-sizing: border-box; }
@@ -38,33 +42,43 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 20px;
-  background: linear-gradient(135deg, var(--blue-deep), var(--green-deep));
-  color: #fff;
+  padding: 16px 24px;
+  background: var(--surface);
+  color: var(--text-main);
   flex-wrap: wrap;
-  box-shadow: var(--shadow);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 12px rgba(43, 42, 40, 0.04);
 }
-.topbar-title { font-size: 18px; font-weight: 600; }
-.topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.topbar-title {
+  font-size: 19px; font-weight: 700; color: var(--text-main);
+  letter-spacing: 0.2px;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .search-box {
-  padding: 8px 14px;
+  padding: 9px 16px;
   border-radius: 20px;
-  border: none;
+  border: 1px solid var(--border);
+  background: var(--bg);
   outline: none;
   font-size: 14px;
   min-width: 160px;
+  color: var(--text-main);
 }
+.search-box:focus { border-color: var(--blue-soft); }
 .admin-link {
-  color: #fff;
+  color: var(--blue-deep);
   text-decoration: none;
-  background: rgba(255,255,255,0.18);
-  padding: 8px 14px;
+  background: var(--blue-pale);
+  padding: 9px 18px;
   border-radius: 20px;
   font-size: 14px;
-  border: none;
+  font-weight: 500;
+  border: 1px solid transparent;
   cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
 }
-.admin-link:hover { background: rgba(255,255,255,0.3); }
+.admin-link:hover { background: var(--surface); border-color: var(--blue-soft); }
 
 /* ---------- Tree area ---------- */
 .tree-wrapper {
@@ -100,12 +114,11 @@ body {
 
 .node-rect { fill: var(--surface); stroke-width: 1.5; }
 .node-male .node-rect { stroke: var(--blue-deep); }
-.node-female .node-rect { stroke: var(--green-deep, #c2679b); }
-.node-female .node-rect { stroke: #C26B94; }
+.node-female .node-rect { stroke: var(--green-deep); }
 .node-name { font-size: 13px; font-weight: 600; fill: var(--text-main); }
 .node-sub { font-size: 11px; fill: var(--text-muted); }
 .tree-node:hover .node-rect { filter: brightness(0.97); }
-.tree-node.highlight .node-rect { stroke: #E0A93B; stroke-width: 3; }
+.tree-node.highlight .node-rect { stroke: #D9A441; stroke-width: 3; }
 
 .zoom-controls {
   position: fixed;
@@ -168,30 +181,72 @@ body {
 .jelajah-crumb-sep { color: var(--text-muted); margin: 0 2px; }
 
 .jelajah-card {
-  border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px;
+  border-radius: var(--radius); padding: 16px 18px;
   border-left: 4px solid var(--blue-deep); background: var(--blue-pale);
 }
-.jelajah-card-female { border-left-color: #C26B94; background: var(--green-pale); }
+.jelajah-card-female { border-left-color: var(--green-deep); background: var(--green-pale); }
 .jelajah-card-name { font-size: 17px; font-weight: 700; color: var(--text-main); }
 .jelajah-card-sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
-.jelajah-biodata-link { margin-top: 8px; padding: 0; }
+.jelajah-biodata-link { margin-top: 0; padding: 0; font-size: 12.5px; }
 
-.jelajah-group { margin-bottom: 16px; }
+/* Kartu besar = posisi sekarang (leluhur/keturunan yg sedang dilihat). Selama
+   anak-anaknya belum ditampilkan, kartu ini bisa diklik utk memunculkan
+   daftar anak & pasangannya (lihat jelajah-card-big-clickable di bawah). */
+.jelajah-card-big { margin-bottom: 18px; padding: 18px 20px; }
+.jelajah-card-big .jelajah-card-name { font-size: 19px; }
+.jelajah-card-big-clickable {
+  cursor: pointer; transition: background 0.15s, border-color 0.15s;
+}
+.jelajah-card-big-clickable:hover { background: var(--blue-pale); border-color: var(--blue-soft); }
+.jelajah-card-big-clickable.jelajah-card-female:hover { background: var(--green-pale); }
+.jelajah-expand-hint {
+  font-size: 12.5px; color: var(--blue-deep); font-weight: 600; margin-top: 8px;
+  display: flex; align-items: center; gap: 4px;
+}
+.jelajah-expand-hint::after { content: '\203A'; font-size: 15px; line-height: 1; }
+
+/* Kartu kecil = anak & pasangannya, bisa diklik utk drill-down ke bawah */
+.jelajah-card-sm {
+  cursor: pointer; background: var(--surface); border: 1px solid var(--border);
+  border-left-width: 4px; transition: background 0.15s, border-color 0.15s;
+}
+.jelajah-card-sm:hover { background: var(--blue-pale); border-color: var(--blue-soft); }
+.jelajah-card-sm.jelajah-card-female:hover { background: var(--green-pale); }
+
+.jelajah-poly-tag {
+  display: inline-block; margin-top: 6px; font-size: 11px; font-weight: 600;
+  color: var(--blue-deep); background: var(--surface); border: 1px solid var(--blue-soft);
+  border-radius: 20px; padding: 2px 8px;
+}
+.jelajah-card-childinfo { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.jelajah-card-links { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+
+/* Kartu orang dgn poligami: kartu luar tidak diklik langsung (info saja),
+   yg diklik adalah tiap baris sub-list pasangan di dalamnya. */
+.jelajah-card-poly { cursor: default; }
+.jelajah-subcard-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.jelajah-subcard {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px;
+  padding: 10px 12px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+}
+.jelajah-subcard:hover { background: var(--blue-pale); border-color: var(--blue-soft); }
+.jelajah-subcard-order {
+  font-size: 11px; font-weight: 700; color: var(--blue-deep);
+  background: var(--blue-pale); border-radius: 20px; padding: 2px 8px;
+}
+.jelajah-subcard-name { font-size: 13.5px; font-weight: 600; color: var(--text-main); }
+.jelajah-subcard-info { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+.jelajah-subcard-arrow { color: var(--blue-deep); font-size: 16px; line-height: 1; }
+
+.jelajah-card-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+.jelajah-children-label { margin-top: 4px; }
+
 .jelajah-group-label { font-size: 13.5px; font-weight: 600; color: var(--text-main); margin: 0 0 8px; }
 .jelajah-muted { font-size: 13px; color: var(--text-muted); }
-.jelajah-noanak { margin: 0 0 4px; }
+.jelajah-noanak { margin: 0 0 12px; }
 
-.jelajah-list { display: flex; flex-direction: column; gap: 8px; }
-.jelajah-item {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--border);
-  border-radius: 10px; background: var(--surface); cursor: pointer; font-family: inherit;
-}
-.jelajah-item:hover { background: var(--blue-pale); border-color: var(--blue-soft); }
-.jelajah-item-name { font-size: 14px; font-weight: 600; color: var(--text-main); }
-.jelajah-item-sub { font-size: 12px; color: var(--text-muted); flex: 1; text-align: right; margin-right: 4px; }
-.jelajah-item-arrow { color: var(--blue-deep); font-size: 18px; line-height: 1; }
-.jelajah-back-row { margin-top: 4px; }
+.jelajah-back-row { margin-top: 16px; }
 .modal-close {
   position: absolute; top: 16px; right: 16px;
   background: none; border: none; font-size: 22px;
@@ -295,11 +350,12 @@ form label { font-size: 13px; font-weight: 500; color: var(--text-muted); displa
 /* ---------- Admin dashboard ---------- */
 .admin-nav { display: flex; gap: 6px; flex-wrap: wrap; }
 .nav-btn {
-  background: rgba(255,255,255,0.15); color: #fff; border: none;
+  background: transparent; color: var(--text-muted); border: 1px solid transparent;
   padding: 8px 14px; border-radius: 20px; cursor: pointer; font-size: 13px;
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 6px; transition: background 0.15s, color 0.15s;
 }
-.nav-btn.active { background: #fff; color: var(--blue-deep); font-weight: 600; }
+.nav-btn:hover { background: var(--blue-pale); color: var(--text-main); }
+.nav-btn.active { background: var(--blue-deep); color: #fff; font-weight: 600; }
 .badge {
   background: var(--danger); color: #fff; border-radius: 10px;
   font-size: 11px; padding: 1px 6px; min-width: 16px; text-align: center;
@@ -390,7 +446,7 @@ h2, h3 { color: var(--text-main); }
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 28px;
-  box-shadow: 0 6px 24px rgba(79, 124, 172, 0.10);
+  box-shadow: 0 6px 24px rgba(86, 96, 114, 0.08);
   margin-bottom: 18px;
   position: relative;
   overflow: hidden;
@@ -411,7 +467,7 @@ h2, h3 { color: var(--text-main); }
   overflow: hidden;
   background: var(--blue-pale);
   border: 4px solid var(--surface);
-  box-shadow: 0 4px 14px rgba(79, 124, 172, 0.18);
+  box-shadow: 0 4px 14px rgba(86, 96, 114, 0.14);
   display: flex; align-items: center; justify-content: center;
 }
 .biodata-foto-img { width: 100%; height: 100%; object-fit: cover; }
@@ -424,7 +480,7 @@ h2, h3 { color: var(--text-main); }
   padding: 6px 14px; border-radius: 999px;
   font-size: 12px; font-weight: 600; text-align: center;
   letter-spacing: 0.2px; white-space: nowrap;
-  box-shadow: 0 3px 8px rgba(79, 124, 172, 0.25);
+  box-shadow: 0 3px 8px rgba(86, 96, 114, 0.20);
 }
 .biodata-gen-sub { display: block; font-size: 10px; font-weight: 500; opacity: 0.85; margin-top: 1px; }
 
@@ -504,7 +560,7 @@ h2, h3 { color: var(--text-main); }
   border: 1px solid var(--border); border-radius: 8px;
   background: var(--surface); padding: 0 10px;
 }
-.ss-root.ss-open .ss-control { border-color: var(--blue-soft); box-shadow: 0 0 0 3px rgba(110,155,199,0.15); }
+.ss-root.ss-open .ss-control { border-color: var(--blue-soft); box-shadow: 0 0 0 3px rgba(140,154,174,0.18); }
 .ss-root.ss-disabled .ss-control { background: #F2F4F6; cursor: not-allowed; }
 .ss-search-input {
   flex: 1; border: none; outline: none; background: transparent;

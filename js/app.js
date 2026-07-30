@@ -25,6 +25,11 @@ async function init() {
   setupLaporanModal();
   setupDashboardModal();
   setupJelajahModal();
+
+  // Revisi: tampilan pertama yang dilihat pengunjung adalah Jelajah Keluarga,
+  // bukan kanvas pohon kosong -- jadi modal Jelajah langsung dibuka begini
+  // data selesai dimuat (hanya kalau ada data untuk dijelajahi).
+  if (allPeople.length > 0) openJelajahModal();
 }
 
 async function loadData() {
@@ -109,6 +114,7 @@ function setZoom(scale) {
 // ---------- Search ----------
 function setupSearch() {
   const input = document.getElementById('search-input');
+  if (!input) return; // kotak pencarian topbar sudah digantikan tab "Pencarian Data"
   input.addEventListener('input', () => {
     const q = input.value.trim().toLowerCase();
     document.querySelectorAll('.tree-node').forEach(node => {
@@ -297,11 +303,34 @@ function closeDashboardModal() {
 }
 
 // ---------- Jelajah Keluarga (mode kartu, drill-down per keturunan) ----------
-// Alternatif dari tampilan pohon bergaris: 1 keluarga (1 orang + pasangan +
-// anak-anaknya) ditampilkan per layar, supaya tidak penuh sesak walau data
-// sudah banyak. `jelajahPath` menyimpan jalur dari leluhur sampai posisi
-// sekarang (dipakai untuk breadcrumb & tombol kembali).
+// Satu "node" = satu pernikahan tertentu (personA + personB) ATAU satu orang
+// tanpa pernikahan tercatat (personB null) -- ini yang dipakai utk KARTU BESAR
+// (posisi sekarang), karena posisi sekarang selalu sudah "pasti" 1 pernikahan
+// spesifik yg dipilih.
+//
+// Untuk daftar KARTU KECIL (leluhur atau anak-anak yg belum diklik), 1 orang =
+// 1 "entry" (bukan 1 node per pernikahan lagi). Kalau orang itu py >1 pernikahan
+// (poligami), kartunya TETAP 1, tapi di dalamnya ada sub-list pasangan (Istri/
+// Suami ke-1, ke-2, ke-3, dst) -- tiap baris sub-list itulah yg diklik utk
+// masuk ke keturunan dari pernikahan tsb. Kalau cuma 1 pernikahan (atau belum
+// menikah), kartu tetap tampil polos (gabungan nama, spt sebelumnya) tanpa
+// sub-list, langsung bisa diklik.
+//
+// `jelajahPath` menyimpan jalur NODE (bukan entry) dari leluhur sampai posisi
+// sekarang -- dipakai utk breadcrumb & kartu besar yang sedang aktif.
 let jelajahPath = [];
+let jelajahCurrentChildEntries = [];   // entry level-anak yg sedang tampil di bawah kartu besar (utk lookup saat kartu/sub-list diklik)
+let jelajahCurrentPickerEntries = [];  // entry level-leluhur yg sedang tampil saat jelajahPath masih kosong
+
+// Apakah daftar "Anak & pasangannya" utk NODE PALING ATAS (jelajahPath teratas)
+// sedang ditampilkan. Supaya publik/tamu pertama kali membuka Jelajah cuma
+// melihat SATU kartu (leluhur utama) dulu -- baru setelah kartu itu diklik,
+// daftar anaknya baru muncul. Setiap kali pindah ke node yg berbeda (masuk
+// lebih dalam), status ini di-reset ke false lagi (harus diklik ulang utk
+// level yg baru itu). Saat KEMBALI naik ke level sebelumnya (atau lewat
+// breadcrumb), status di-set true lagi krn level itu memang sudah pernah
+// dibuka sebelumnya (itulah caranya bisa turun ke level yg sekarang).
+let jelajahShowChildren = false;
 
 function setupJelajahModal() {
   document.getElementById('btn-jelajah').addEventListener('click', openJelajahModal);
@@ -311,16 +340,80 @@ function setupJelajahModal() {
   });
 }
 
+// Semua pernikahan personId, tiap pernikahan jadi 1 node (dipakai baik utk
+// kartu besar maupun utk isi sub-list poligami). Kalau tidak punya pernikahan
+// tercatat sama sekali, tetap 1 node (personB null).
+function getPersonMarriageNodes(personId) {
+  const marriagesOf = allMarriages
+    .filter(m => m.orangId1 === personId || m.orangId2 === personId)
+    .sort((a, b) => (a.urutanPasangan || 1) - (b.urutanPasangan || 1));
+
+  if (marriagesOf.length === 0) {
+    return [{ personAId: personId, personBId: null, marriageId: null, indexLabel: null, childIds: [] }];
+  }
+  const isPoly = marriagesOf.length > 1;
+  return marriagesOf.map((m, idx) => {
+    const partnerId = m.orangId1 === personId ? m.orangId2 : m.orangId1;
+    return {
+      personAId: personId,
+      personBId: partnerId || null,
+      marriageId: m.id,
+      indexLabel: isPoly ? (idx + 1) : null,
+      childIds: m.childIds || []
+    };
+  });
+}
+
+// 1 entry = 1 orang beserta seluruh node pernikahannya (dipakai utk kartu kecil).
+function makeEntry(personId) {
+  return { personId, nodes: getPersonMarriageNodes(personId) };
+}
+
+// Entry anak-anak dari sebuah node (dipanggil setelah kartu besar diklik) --
+// tiap anak jadi 1 entry (poligami anak = 1 kartu ttp dgn sub-list di dalamnya).
+function getChildEntriesOf(node) {
+  return (node.childIds || []).map(cid => makeEntry(cid));
+}
+
+// Entry level paling awal, dipakai kalau admin belum menyetel "Keluarga Utama"
+// -- tamu memilih dulu mau mulai jelajah dari leluhur mana. Leluhur = orang
+// yang belum tercatat orang tuanya. Dedupe by marriageId supaya 1 pasangan
+// leluhur (mis. suami & istri yg sama2 tanpa orang tua tercatat) tidak
+// menghasilkan 2 kartu terpisah utk pernikahan yang sama.
+function getRootPickerEntries() {
+  const leluhurList = allPeople.filter(p => {
+    const { ayah, ibu } = RelationRules.getParents(p.id, allPeople, allMarriages);
+    return !ayah && !ibu;
+  });
+  const seenMarriageIds = new Set();
+  const result = [];
+  leluhurList.forEach(p => {
+    const nodes = getPersonMarriageNodes(p.id);
+    const belumMenikah = nodes.length === 1 && !nodes[0].marriageId;
+    if (belumMenikah) { result.push({ personId: p.id, nodes }); return; }
+
+    const nodesBaru = nodes.filter(n => !seenMarriageIds.has(n.marriageId));
+    if (nodesBaru.length === 0) return; // semua pernikahannya sudah kebawa lewat kartu pasangannya
+    nodesBaru.forEach(n => seenMarriageIds.add(n.marriageId));
+    result.push({ personId: p.id, nodes: nodesBaru });
+  });
+  return result;
+}
+
 function openJelajahModal() {
   const rootId = appSettings.rootPersonId;
   const rootValid = rootId && allPeople.some(p => p.id === rootId);
   if (rootValid) {
-    jelajahPath = [rootId];
-    renderJelajah();
+    const rootNodes = getPersonMarriageNodes(rootId);
+    // Kalau leluhur utama cuma py 1 pernikahan -> langsung tampil sbg kartu besar
+    // tanpa perlu pilih dulu. Kalau poligami (jarang utk leluhur utama), tamu
+    // pilih dulu (via sub-list) pernikahan mana yg mau ditelusuri.
+    jelajahPath = rootNodes.length === 1 ? [rootNodes[0]] : [];
   } else {
     jelajahPath = [];
-    renderJelajahPilihLeluhur();
   }
+  jelajahShowChildren = false;
+  renderJelajah();
   document.getElementById('jelajah-modal').style.display = 'flex';
 }
 
@@ -328,111 +421,208 @@ function closeJelajahModal() {
   document.getElementById('jelajah-modal').style.display = 'none';
 }
 
-// Dipakai kalau admin belum menyetel "Keluarga Utama" -- tamu memilih dulu
-// mau mulai jelajah dari leluhur mana (orang yang belum tercatat orang tuanya).
-function renderJelajahPilihLeluhur() {
-  const leluhurList = allPeople.filter(p => {
-    const { ayah, ibu } = RelationRules.getParents(p.id, allPeople, allMarriages);
-    return !ayah && !ibu;
-  });
-  document.getElementById('jelajah-breadcrumb').innerHTML = '';
-  document.getElementById('jelajah-body').innerHTML = `
-    <p class="jelajah-muted">Pilih leluhur untuk mulai menjelajah:</p>
-    <div class="jelajah-list">
-      ${leluhurList.map(p => `
-        <button class="jelajah-item" onclick="jelajahMasuk('${p.id}')">
-          <span class="jelajah-item-name">${escapeHtml(p.nama)}</span>
-          <span class="jelajah-item-arrow">&rsaquo;</span>
-        </button>
-      `).join('') || '<p class="jelajah-muted">Belum ada data orang.</p>'}
-    </div>
-  `;
+// entryIdx = index kartu di jelajahCurrentPickerEntries/jelajahCurrentChildEntries.
+// nodeIdx = index pernikahan di dalam entry itu (0 kalau kartu polos/1 pernikahan,
+// atau sesuai baris sub-list yg diklik kalau poligami).
+function jelajahMasukChild(entryIdx, nodeIdx) {
+  const source = jelajahPath.length === 0 ? jelajahCurrentPickerEntries : jelajahCurrentChildEntries;
+  const entry = source[entryIdx];
+  if (!entry) return;
+  const node = entry.nodes[nodeIdx || 0];
+  if (!node) return;
+  jelajahPath.push(node);
+  jelajahShowChildren = false; // level baru ini blm diklik -- tampilkan 1 kartu dulu
+  renderJelajah();
 }
 
-function jelajahMasuk(personId) {
-  jelajahPath.push(personId);
+// Diklik saat kartu besar (leluhur/posisi sekarang) yg anaknya belum
+// ditampilkan -- memunculkan daftar "Anak & pasangannya" di bawahnya.
+function jelajahBukaAnak() {
+  jelajahShowChildren = true;
   renderJelajah();
 }
 
 function jelajahKembali() {
   jelajahPath.pop();
-  if (jelajahPath.length === 0) {
-    renderJelajahPilihLeluhur();
-  } else {
-    renderJelajah();
-  }
+  jelajahShowChildren = true; // level ini sebelumnya memang sudah dibuka (asal bisa turun ke bawahnya)
+  renderJelajah();
 }
 
 function jelajahKeBreadcrumb(index) {
   jelajahPath = jelajahPath.slice(0, index + 1);
+  jelajahShowChildren = true; // level ini sebelumnya memang sudah dibuka
   renderJelajah();
 }
 
-function renderJelajah() {
-  const personId = jelajahPath[jelajahPath.length - 1];
-  const person = allPeople.find(p => p.id === personId);
-  if (!person) { renderJelajahPilihLeluhur(); return; }
+function jelajahNodeLabel(node) {
+  const a = allPeople.find(p => p.id === node.personAId);
+  const b = node.personBId ? allPeople.find(p => p.id === node.personBId) : null;
+  const namaA = a ? a.nama : '?';
+  return escapeHtml(b ? `${namaA} & ${b.nama}` : namaA);
+}
 
-  const crumbHtml = jelajahPath.map((id, i) => {
-    const p = allPeople.find(x => x.id === id);
-    const nama = p ? p.nama : '?';
-    const isLast = i === jelajahPath.length - 1;
-    return `<span class="jelajah-crumb${isLast ? ' jelajah-crumb-active' : ''}" onclick="jelajahKeBreadcrumb(${i})">${escapeHtml(nama)}</span>${isLast ? '' : '<span class="jelajah-crumb-sep">&rsaquo;</span>'}`;
-  }).join('');
-  document.getElementById('jelajah-breadcrumb').innerHTML = crumbHtml;
+// Render KARTU BESAR (posisi sekarang) dari 1 node yg sudah pasti/dipilih --
+// tidak ada sub-list di sini krn pernikahannya sudah spesifik dipilih; naik
+// lagi lewat breadcrumb/tombol Kembali kalau mau lihat pasangan lain orang ini.
+function renderJelajahBigCard(node, showChildren) {
+  const personA = allPeople.find(p => p.id === node.personAId);
+  if (!personA) return '';
+  const personB = node.personBId ? allPeople.find(p => p.id === node.personBId) : null;
+  const isFemaleA = personA.jenisKelamin === 'Perempuan';
 
-  const marriagesOf = allMarriages
-    .filter(m => m.orangId1 === personId || m.orangId2 === personId)
-    .sort((a, b) => (a.urutanPasangan || 1) - (b.urutanPasangan || 1));
+  const title = personB
+    ? `${escapeHtml(personA.nama)} &amp; ${escapeHtml(personB.nama)}`
+    : escapeHtml(personA.nama);
+  const genderSub = personB
+    ? `${escapeHtml(personA.jenisKelamin || '-')} &amp; ${escapeHtml(personB.jenisKelamin || '-')}`
+    : escapeHtml(personA.jenisKelamin || '-');
+  const polyTag = node.indexLabel
+    ? `<span class="jelajah-poly-tag">Pernikahan ke-${node.indexLabel}</span>`
+    : '';
+  const childCount = (node.childIds || []).length;
+  const childInfo = `<div class="jelajah-card-childinfo">${childCount ? childCount + ' anak tercatat' : 'Belum ada anak tercatat'}</div>`;
+  const biodataLinks = `
+    <div class="jelajah-card-links">
+      <button class="btn-link jelajah-biodata-link" onclick="event.stopPropagation();openDetail('${node.personAId}')">Biodata ${escapeHtml(personA.nama)}</button>
+      ${personB ? `<button class="btn-link jelajah-biodata-link" onclick="event.stopPropagation();openDetail('${node.personBId}')">Biodata ${escapeHtml(personB.nama)}</button>` : ''}
+    </div>
+  `;
+  // Selama daftar anak blm ditampilkan, kartu ini sendiri bisa diklik utk
+  // memunculkannya (kalau memang ada anak tercatat) -- diberi hint "> Lihat
+  // anak & pasangannya" spy tamu tahu kartu ini bisa diklik.
+  const clickable = !showChildren && childCount > 0;
+  const expandHint = clickable ? `<div class="jelajah-expand-hint">Lihat anak &amp; pasangannya</div>` : '';
 
+  return `
+    <div class="jelajah-card jelajah-card-big ${isFemaleA ? 'jelajah-card-female' : ''} ${clickable ? 'jelajah-card-big-clickable' : ''}"
+      ${clickable ? 'onclick="jelajahBukaAnak()"' : ''}>
+      <div class="jelajah-card-name">${title}</div>
+      <div class="jelajah-card-sub">${genderSub}</div>
+      ${polyTag}
+      ${childInfo}
+      ${expandHint}
+      ${biodataLinks}
+    </div>
+  `;
+}
+
+// Render KARTU KECIL dari 1 entry (leluhur ATAU anak, belum dipilih/diklik).
+// Kalau entry.nodes cuma 1 (blm menikah atau monogami) -> kartu polos, seluruh
+// kartu bisa diklik langsung (spt sebelumnya, tanpa lapisan tambahan).
+// Kalau entry.nodes > 1 (poligami) -> TETAP 1 kartu utk orangnya, tapi di
+// dalamnya ada sub-list pasangan (Istri/Suami ke-1, ke-2, dst); tiap baris
+// sub-list itulah yg diklik utk membuka keturunan dari pernikahan tsb.
+function renderJelajahEntryCard(entry, entryIdx) {
+  const person = allPeople.find(p => p.id === entry.personId);
+  if (!person) return '';
+  const nodes = entry.nodes;
+
+  if (nodes.length <= 1) {
+    const node = nodes[0];
+    const personB = node.personBId ? allPeople.find(p => p.id === node.personBId) : null;
+    const isFemaleA = person.jenisKelamin === 'Perempuan';
+    const title = personB
+      ? `${escapeHtml(person.nama)} &amp; ${escapeHtml(personB.nama)}`
+      : escapeHtml(person.nama);
+    const genderSub = personB
+      ? `${escapeHtml(person.jenisKelamin || '-')} &amp; ${escapeHtml(personB.jenisKelamin || '-')}`
+      : escapeHtml(person.jenisKelamin || '-');
+    const childCount = (node.childIds || []).length;
+    const childInfo = `<div class="jelajah-card-childinfo">${childCount ? childCount + ' anak tercatat' : 'Belum ada anak tercatat'}</div>`;
+    const biodataLinks = `
+      <div class="jelajah-card-links">
+        <button class="btn-link jelajah-biodata-link" onclick="event.stopPropagation();openDetail('${person.id}')">Biodata ${escapeHtml(person.nama)}</button>
+        ${personB ? `<button class="btn-link jelajah-biodata-link" onclick="event.stopPropagation();openDetail('${node.personBId}')">Biodata ${escapeHtml(personB.nama)}</button>` : ''}
+      </div>
+    `;
+    return `
+      <div class="jelajah-card jelajah-card-sm ${isFemaleA ? 'jelajah-card-female' : ''}" onclick="jelajahMasukChild(${entryIdx}, 0)">
+        <div class="jelajah-card-name">${title}</div>
+        <div class="jelajah-card-sub">${genderSub}</div>
+        ${childInfo}
+        ${biodataLinks}
+      </div>
+    `;
+  }
+
+  // Poligami: 1 kartu utk orangnya + sub-list pasangan di dalamnya.
   const isMale = person.jenisKelamin === 'Laki-laki';
   const isFemale = person.jenisKelamin === 'Perempuan';
   const partnerWord = isMale ? 'Istri' : (isFemale ? 'Suami' : 'Pasangan');
-  const isPoly = marriagesOf.length > 1;
+  const totalAnak = nodes.reduce((sum, n) => sum + (n.childIds || []).length, 0);
 
-  let groupsHtml;
-  if (marriagesOf.length === 0) {
-    groupsHtml = '<p class="jelajah-muted">Belum ada data pasangan/anak untuk orang ini.</p>';
-  } else {
-    groupsHtml = marriagesOf.map((m, idx) => {
-      const partnerId = m.orangId1 === personId ? m.orangId2 : m.orangId1;
-      const partner = partnerId ? allPeople.find(p => p.id === partnerId) : null;
-      const label = partner
-        ? `${partnerWord}${isPoly ? ' ke-' + (idx + 1) : ''}: ${escapeHtml(partner.nama)}`
-        : `${partnerWord}${isPoly ? ' ke-' + (idx + 1) : ''}: <span class="jelajah-muted">belum tercatat</span>`;
+  const subRows = nodes.map((n, ni) => {
+    const partner = n.personBId ? allPeople.find(p => p.id === n.personBId) : null;
+    const partnerName = partner ? escapeHtml(partner.nama) : '<span class="jelajah-muted">belum tercatat</span>';
+    const childCount = (n.childIds || []).length;
+    return `
+      <div class="jelajah-subcard" onclick="event.stopPropagation();jelajahMasukChild(${entryIdx}, ${ni})">
+        <span class="jelajah-subcard-order">${partnerWord} ke-${n.indexLabel || (ni + 1)}</span>
+        <span class="jelajah-subcard-name">${partnerName}</span>
+        <span class="jelajah-subcard-info">${childCount ? childCount + ' anak' : 'belum ada anak'}</span>
+        <span class="jelajah-subcard-arrow">&rsaquo;</span>
+      </div>
+    `;
+  }).join('');
 
-      const anakIds = m.childIds || [];
-      const anakHtml = anakIds.length
-        ? `<div class="jelajah-list">${anakIds.map(cid => {
-            const c = allPeople.find(p => p.id === cid);
-            if (!c) return '';
-            const jumlahAnak = RelationRules.getChildren(cid, allMarriages).length;
-            return `
-              <button class="jelajah-item" onclick="jelajahMasuk('${cid}')">
-                <span class="jelajah-item-name">${escapeHtml(c.nama)}</span>
-                <span class="jelajah-item-sub">${jumlahAnak ? jumlahAnak + ' anak' : 'belum ada anak tercatat'}</span>
-                <span class="jelajah-item-arrow">&rsaquo;</span>
-              </button>
-            `;
-          }).join('')}</div>`
-        : '<p class="jelajah-muted jelajah-noanak">Belum ada anak tercatat.</p>';
+  return `
+    <div class="jelajah-card jelajah-card-sm jelajah-card-poly ${isFemale ? 'jelajah-card-female' : ''}">
+      <div class="jelajah-card-name">${escapeHtml(person.nama)}</div>
+      <div class="jelajah-card-sub">${escapeHtml(person.jenisKelamin || '-')} &middot; ${nodes.length} pernikahan &middot; ${totalAnak} anak tercatat</div>
+      <div class="jelajah-subcard-list">${subRows}</div>
+      <div class="jelajah-card-links">
+        <button class="btn-link jelajah-biodata-link" onclick="openDetail('${person.id}')">Biodata ${escapeHtml(person.nama)}</button>
+      </div>
+    </div>
+  `;
+}
 
-      return `<div class="jelajah-group"><p class="jelajah-group-label">${label}</p>${anakHtml}</div>`;
-    }).join('');
+function renderJelajah() {
+  const breadcrumbEl = document.getElementById('jelajah-breadcrumb');
+  const bodyEl = document.getElementById('jelajah-body');
+
+  // Belum ada leluhur dipilih -- tampilkan kartu-kartu leluhur utk dipilih.
+  if (jelajahPath.length === 0) {
+    jelajahCurrentPickerEntries = getRootPickerEntries();
+    breadcrumbEl.innerHTML = '';
+    bodyEl.innerHTML = `
+      <p class="jelajah-muted">Pilih leluhur untuk mulai menjelajah:</p>
+      <div class="jelajah-card-list">
+        ${jelajahCurrentPickerEntries.map((entry, i) => renderJelajahEntryCard(entry, i)).join('')
+          || '<p class="jelajah-muted">Belum ada data orang.</p>'}
+      </div>
+    `;
+    return;
   }
 
-  const backBtn = jelajahPath.length > 1 || (jelajahPath.length === 1 && !appSettings.rootPersonId)
-    ? `<div class="jelajah-back-row"><button class="btn-link" onclick="jelajahKembali()">&larr; Kembali</button></div>`
-    : '';
+  // Breadcrumb dari jalur node yg sudah dilalui.
+  const crumbHtml = jelajahPath.map((node, i) => {
+    const isLast = i === jelajahPath.length - 1;
+    return `<span class="jelajah-crumb${isLast ? ' jelajah-crumb-active' : ''}" onclick="jelajahKeBreadcrumb(${i})">${jelajahNodeLabel(node)}</span>${isLast ? '' : '<span class="jelajah-crumb-sep">&rsaquo;</span>'}`;
+  }).join('');
+  breadcrumbEl.innerHTML = crumbHtml;
 
-  document.getElementById('jelajah-body').innerHTML = `
-    <div class="jelajah-card ${isFemale ? 'jelajah-card-female' : ''}">
-      <div class="jelajah-card-name">${escapeHtml(person.nama)}</div>
-      <div class="jelajah-card-sub">${escapeHtml(person.jenisKelamin || '-')}</div>
-      <button class="btn-link jelajah-biodata-link" onclick="openDetail('${personId}')">Lihat biodata lengkap</button>
-    </div>
-    ${groupsHtml}
-    ${backBtn}
+  const topNode = jelajahPath[jelajahPath.length - 1];
+  jelajahCurrentChildEntries = getChildEntriesOf(topNode);
+
+  // Selama kartu besar belum diklik (jelajahShowChildren masih false), daftar
+  // anak & pasangannya BELUM ditampilkan sama sekali -- publik/tamu hanya
+  // melihat 1 kartu (leluhur/posisi sekarang) dulu, sesuai revisi.
+  let childrenSection = '';
+  if (jelajahShowChildren) {
+    const childrenHtml = jelajahCurrentChildEntries.length
+      ? `<div class="jelajah-card-list">${jelajahCurrentChildEntries.map((entry, i) => renderJelajahEntryCard(entry, i)).join('')}</div>`
+      : '<p class="jelajah-muted jelajah-noanak">Belum ada anak tercatat.</p>';
+    childrenSection = `
+      <p class="jelajah-group-label jelajah-children-label">Anak &amp; pasangannya:</p>
+      ${childrenHtml}
+    `;
+  }
+
+  bodyEl.innerHTML = `
+    ${renderJelajahBigCard(topNode, jelajahShowChildren)}
+    ${childrenSection}
+    <div class="jelajah-back-row"><button class="btn-link" onclick="jelajahKembali()">&larr; Kembali</button></div>
   `;
 }
 
