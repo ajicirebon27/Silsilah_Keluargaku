@@ -25,11 +25,56 @@ async function init() {
   setupLaporanModal();
   setupDashboardModal();
   setupJelajahModal();
+  setupViewPicker();
 
-  // Revisi: tampilan pertama yang dilihat pengunjung adalah Jelajah Keluarga,
-  // bukan kanvas pohon kosong -- jadi modal Jelajah langsung dibuka begini
-  // data selesai dimuat (hanya kalau ada data untuk dijelajahi).
-  if (allPeople.length > 0) openJelajahModal();
+  // Revisi: tampilan pertama yang dilihat pengunjung adalah LAYAR PILIHAN
+  // TAMPILAN (kartu atau pohon), bukan langsung salah satu mode -- dan bukan
+  // pula kanvas pohon/node yang otomatis kelihatan (baru dirender begitu
+  // tamu memilih mode Pohon di layar pilihan ini).
+  if (allPeople.length > 0) showViewPicker();
+}
+
+// ---------- Layar Pilihan Tampilan (Kartu / Pohon) ----------
+let treeRendered = false;
+
+function isRootFixed() {
+  const rootId = appSettings.rootPersonId;
+  return !!(rootId && allPeople.some(p => p.id === rootId));
+}
+
+function setupViewPicker() {
+  document.getElementById('pick-kartu').addEventListener('click', showKartuView);
+  document.getElementById('pick-pohon').addEventListener('click', showPohonView);
+  document.getElementById('btn-jelajah').addEventListener('click', showKartuView);
+  document.getElementById('btn-pohon-topbar').addEventListener('click', showPohonView);
+  document.getElementById('btn-pohon-kembali').addEventListener('click', showViewPicker);
+}
+
+function showViewPicker() {
+  closeJelajahModal();
+  document.getElementById('pohon-view').style.display = 'none';
+  document.getElementById('view-picker').style.display = 'flex';
+}
+
+function showPohonView() {
+  document.getElementById('view-picker').style.display = 'none';
+  document.getElementById('pohon-view').style.display = 'flex';
+  renderTreeIfNeeded();
+}
+
+function showKartuView() {
+  document.getElementById('view-picker').style.display = 'none';
+  openJelajahModal();
+}
+
+// Pohon baru digambar sekali, saat pertama kali tamu memilih mode Pohon --
+// bukan otomatis saat halaman dimuat -- supaya layar awal bebas dari
+// tampilan node/garis yang bisa terasa penuh/mengganggu mata.
+function renderTreeIfNeeded() {
+  if (treeRendered) return;
+  renderTreeSVG(treeContainer, allPeople, allMarriages, openDetail);
+  TreeControls.collapseAll(treeContainer);
+  treeRendered = true;
 }
 
 async function loadData() {
@@ -63,17 +108,9 @@ async function loadData() {
     document.getElementById('empty-state').style.display = 'flex';
     return;
   }
-  renderTreeSVG(treeContainer, allPeople, allMarriages, openDetail);
-
-  // Halaman publik: sembunyikan SEMUA keturunan secara default saat pertama
-  // dibuka, jadi yang tamu lihat pertama kali cuma leluhur paling atas
-  // (mis. Bapak Darsa & Ibu Kesi) -- bukan seluruh pohon sekaligus yang
-  // bisa terasa penuh/membingungkan. Tamu lalu klik lencana "+" pada kotak
-  // seseorang utk membuka (unhide) keturunannya satu per satu, lengkap
-  // dgn animasi fade singkat yang sudah ditangani oleh toggleTreeNode()
-  // di tree.js. Ini TIDAK memengaruhi tampilan admin (admin punya
-  // container SVG sendiri, statusnya disimpan terpisah per container).
-  TreeControls.collapseAll(treeContainer);
+  // Catatan: pohon (SVG) TIDAK dirender di sini lagi -- baru digambar lewat
+  // renderTreeIfNeeded() saat tamu memilih mode "Pohon Keluarga" di layar
+  // pilihan tampilan, supaya layar awal bersih dari node/garis.
 }
 
 // ---------- Pan & Zoom ----------
@@ -333,10 +370,9 @@ let jelajahCurrentPickerEntries = [];  // entry level-leluhur yg sedang tampil s
 let jelajahShowChildren = false;
 
 function setupJelajahModal() {
-  document.getElementById('btn-jelajah').addEventListener('click', openJelajahModal);
-  document.getElementById('jelajah-modal-close').addEventListener('click', closeJelajahModal);
+  document.getElementById('jelajah-modal-close').addEventListener('click', showViewPicker);
   document.getElementById('jelajah-modal').addEventListener('click', e => {
-    if (e.target.id === 'jelajah-modal') closeJelajahModal();
+    if (e.target.id === 'jelajah-modal') showViewPicker();
   });
 }
 
@@ -442,7 +478,18 @@ function jelajahBukaAnak() {
   renderJelajah();
 }
 
+// Tombol "Kembali" selalu mundur PERSIS SATU LANGKAH sesuai urutan tamu
+// masuk (hulu -> hilir saat maju, hilir -> hulu saat mundur). Kalau sudah
+// berada di level paling atas (leluhur awal, atau leluhur tetap kalau admin
+// sudah menyetel "Keluarga Utama"), langkah mundur berikutnya membawa tamu
+// keluar dari mode Kartu, kembali ke layar Pilihan Tampilan paling awal --
+// bukan berhenti begitu saja di tengah jalan.
 function jelajahKembali() {
+  const sudahDiLevelAwal = isRootFixed() ? jelajahPath.length <= 1 : jelajahPath.length <= 0;
+  if (sudahDiLevelAwal) {
+    showViewPicker();
+    return;
+  }
   jelajahPath.pop();
   jelajahShowChildren = true; // level ini sebelumnya memang sudah dibuka (asal bisa turun ke bawahnya)
   renderJelajah();
@@ -591,6 +638,7 @@ function renderJelajah() {
         ${jelajahCurrentPickerEntries.map((entry, i) => renderJelajahEntryCard(entry, i)).join('')
           || '<p class="jelajah-muted">Belum ada data orang.</p>'}
       </div>
+      <div class="jelajah-back-row"><button class="btn-link" onclick="jelajahKembali()">&larr; Kembali ke Pilihan Tampilan</button></div>
     `;
     return;
   }

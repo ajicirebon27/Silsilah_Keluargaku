@@ -13,28 +13,56 @@
 <header class="topbar">
   <div class="topbar-title" id="app-title">Silsilah Keluarga</div>
   <div class="topbar-actions">
-    <button id="btn-jelajah" class="admin-link">Jelajah</button>
+    <button id="btn-jelajah" class="admin-link">Kartu</button>
+    <button id="btn-pohon-topbar" class="admin-link">Pohon</button>
     <button id="btn-dashboard" class="admin-link">Dashboard</button>
     <button id="btn-laporan" class="admin-link">Pencarian Data</button>
+    <a href="admin.html" class="admin-link admin-link-tab">Admin</a>
   </div>
 </header>
 
 <main>
-  <div id="tree-wrapper" class="tree-wrapper">
-    <div id="tree-container" class="tree-container"></div>
+  <!-- Layar pilihan tampilan: muncul pertama kali sebelum tamu masuk ke mode
+       kartu ATAU mode pohon -- supaya layar awal bersih, tidak langsung
+       menampilkan diagram pohon/node yang bisa terasa penuh/membingungkan. -->
+  <div id="view-picker" class="view-picker" style="display:none">
+    <h1 class="view-picker-title">Pilih Tampilan Silsilah</h1>
+    <p class="view-picker-sub">Pilih cara kamu ingin menjelajahi data keluarga di bawah ini.</p>
+    <div class="view-picker-options">
+      <button id="pick-kartu" class="view-picker-card">
+        <div class="view-picker-icon">🗂️</div>
+        <div class="view-picker-label">Tampilan Kartu</div>
+        <div class="view-picker-desc">Jelajahi keluarga selangkah demi selangkah -- satu keluarga per layar, mudah diikuti.</div>
+      </button>
+      <button id="pick-pohon" class="view-picker-card">
+        <div class="view-picker-icon">🌳</div>
+        <div class="view-picker-label">Pohon Keluarga</div>
+        <div class="view-picker-desc">Lihat seluruh garis keturunan sekaligus dalam bentuk diagram pohon bergaris.</div>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mode Pohon Keluarga: baru dirender/ditampilkan setelah tamu memilihnya
+       di atas -- bukan otomatis tampil di layar awal. -->
+  <div id="pohon-view" style="display:none">
+    <div class="pohon-topbar">
+      <button id="btn-pohon-kembali" class="btn-link">&larr; Kembali ke Pilihan Tampilan</button>
+    </div>
+    <div id="tree-wrapper" class="tree-wrapper">
+      <div id="tree-container" class="tree-container"></div>
+    </div>
+    <div class="zoom-controls">
+      <button id="zoom-in" aria-label="Perbesar">+</button>
+      <button id="zoom-reset" aria-label="Reset tampilan">⤢</button>
+      <button id="zoom-out" aria-label="Perkecil">−</button>
+      <button id="tree-expand-all" aria-label="Perluas semua keturunan" title="Perluas Semua">&#8862;</button>
+      <button id="tree-collapse-all" aria-label="Ciutkan semua keturunan" title="Ciutkan Semua">&#8863;</button>
+    </div>
   </div>
 
   <div id="empty-state" class="empty-state" style="display:none">
     <p>Belum ada data silsilah keluarga.</p>
     <p class="empty-sub">Admin dapat mulai menambahkan data lewat halaman Admin.</p>
-  </div>
-
-  <div class="zoom-controls">
-    <button id="zoom-in" aria-label="Perbesar">+</button>
-    <button id="zoom-reset" aria-label="Reset tampilan">⤢</button>
-    <button id="zoom-out" aria-label="Perkecil">−</button>
-    <button id="tree-expand-all" aria-label="Perluas semua keturunan" title="Perluas Semua">&#8862;</button>
-    <button id="tree-collapse-all" aria-label="Ciutkan semua keturunan" title="Ciutkan Semua">&#8863;</button>
   </div>
 </main>
 
