@@ -1,25 +1,29 @@
 /* =====================================================================
-   TEMA: putih soft & elegan (slate + soft gold), modern & lembut
+   TEMA: Liquid Glass -- hijau transparan bergaya "gelas kaca" (glassmorphism)
    Catatan: nama variabel lama (--blue-*, --green-*) sengaja dipertahankan
    supaya seluruh file lain (tree.js, admin.js, admin.html) otomatis ikut
    berubah tanpa perlu disentuh satu per satu -- hanya NILAI warnanya yang
-   diganti ke palet baru.
+   diganti ke palet hijau kaca + efek blur transparan (backdrop-filter).
+   --blue-* dipakai sbg aksen "pria" (kini: teal/emerald tua), --green-*
+   dipakai sbg aksen "wanita" (kini: hijau lime hangat) -- keduanya masih
+   dalam keluarga hijau supaya seluruh tema tetap terasa hijau menyeluruh.
    ===================================================================== */
 :root {
-  --blue-soft: #8C9AAE;   /* slate lembut -- aksen umum & pria */
-  --blue-deep: #566072;   /* slate tua -- aksen utama, tombol primer, teks aksen */
-  --blue-pale: #F1F3F6;   /* slate sangat pucat -- latar kartu/hover */
-  --green-soft: #CBAE84;  /* gold hangat lembut -- aksen sekunder & wanita */
-  --green-deep: #A8824F;  /* gold tua -- aksen sekunder, garis anak */
-  --green-pale: #FBF4E9;  /* krem pucat -- latar kartu/hover sekunder */
-  --bg: #FAF9F7;          /* putih hangat, soft */
-  --surface: #FFFFFF;
-  --text-main: #2B2A28;
-  --text-muted: #85817B;
-  --border: #EAE6E0;
+  --blue-soft: #34D399;   /* emerald lembut -- aksen umum & pria */
+  --blue-deep: #0F766E;   /* teal tua -- aksen utama, tombol primer, teks aksen */
+  --blue-pale: rgba(20, 184, 166, 0.14);  /* teal sangat pucat -- latar kartu/hover */
+  --green-soft: #84CC16;  /* hijau lime hangat -- aksen sekunder & wanita */
+  --green-deep: #4D7C0F;  /* hijau lime tua -- aksen sekunder, garis anak */
+  --green-pale: rgba(132, 204, 22, 0.14); /* hijau lime pucat -- latar kartu/hover sekunder */
+  --bg: #E7F5EF;          /* dasar hijau mint lembut, latar utama */
+  --surface: rgba(255, 255, 255, 0.55);  /* "gelas" transparan -- dipakai bareng --glass-blur */
+  --text-main: #133226;
+  --text-muted: #4B6357;
+  --border: rgba(255, 255, 255, 0.45);
   --danger: #C0685C;
-  --radius: 14px;
-  --shadow: 0 4px 20px rgba(43, 42, 40, 0.06);
+  --radius: 16px;
+  --shadow: 0 8px 28px rgba(15, 118, 110, 0.14);
+  --glass-blur: 18px;
 }
 
 * { box-sizing: border-box; }
@@ -32,8 +36,32 @@ html, body {
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--bg);
   color: var(--text-main);
+  background-color: var(--bg);
+  /* "Gelembung" kaca hijau blur di latar, seperti efek liquid glass */
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(16, 185, 129, 0.38), transparent 42%),
+    radial-gradient(circle at 88% 12%, rgba(13, 148, 136, 0.32), transparent 46%),
+    radial-gradient(circle at 78% 88%, rgba(5, 150, 105, 0.28), transparent 42%),
+    radial-gradient(circle at 15% 92%, rgba(132, 204, 22, 0.22), transparent 40%),
+    linear-gradient(160deg, #DFF5EC 0%, #D6F2E8 45%, #E4F7EF 100%);
+  background-attachment: fixed;
+  background-size: cover;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Kartu/permukaan "kaca": blur di belakangnya supaya warna latar hijau
+   tembus samar-samar di baliknya (liquid glass effect). Ditempel ke semua
+   elemen yang memakai var(--surface) sbg latar. */
+.topbar, .admin-link, .zoom-controls button, .view-picker-card,
+.modal-card, .jelajah-card-sm, .jelajah-poly-tag, .jelajah-subcard,
+.auth-card, .admin-table, .setting-block, .comment-card, .relasi-result-item,
+.relasi-section, .biodata-folio, .biodata-photo-frame, .relasi-selected-card,
+.relasi-filter-select, .relasi-summary-chip, .page-btn, .ss-control, .ss-panel,
+.dashboard-card, .dashboard-recent-row {
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 /* ---------- Topbar ---------- */
@@ -227,7 +255,9 @@ body {
 /* ---------- Modal ---------- */
 .modal-overlay {
   position: fixed; inset: 0;
-  background: rgba(46, 58, 70, 0.45);
+  background: rgba(6, 54, 43, 0.42);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
   padding: 16px;
   z-index: 100;
@@ -408,8 +438,12 @@ form label { font-size: 13px; font-weight: 500; color: var(--text-muted); displa
 
 /* ---------- Auth screen ---------- */
 .auth-screen {
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--blue-pale), var(--green-pale));
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.35), transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(13, 148, 136, 0.35), transparent 45%),
+    linear-gradient(135deg, #CDEFE2, #E4F7EF);
   padding: 16px;
 }
 .auth-card {
@@ -611,7 +645,7 @@ h2, h3 { color: var(--text-main); }
 .relasi-summary-chip strong { font-weight: 700; }
 .relasi-summary-chip:hover { background: var(--blue-pale); }
 .relasi-summary-chip.active { border-color: var(--blue-deep); background: var(--blue-pale); color: var(--blue-deep); }
-.relasi-summary-sudah.active { border-color: #4F7CAC; background: #EAF1F8; color: #2F5A85; }
+.relasi-summary-sudah.active { border-color: var(--blue-deep); background: var(--blue-pale); color: var(--blue-deep); }
 .relasi-summary-belum.active { border-color: #D97706; background: #FEF3E2; color: #9A5B00; }
 .relasi-summary-chip svg { display: block; }
 
@@ -721,4 +755,34 @@ h2, h3 { color: var(--text-main); }
 @media (max-width: 420px) {
   .topbar-actions { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ---------- Penyesuaian saat HP diputar ke landscape ----------
+   Saat lebar layar > tinggi (landscape) di HP, ruang vertikal jadi
+   sempit -- topbar & padding vertikal dikecilkan supaya konten utama
+   (pohon/kartu/form) tetap dapat ruang maksimal tanpa perlu di-pinch. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .topbar { padding: 8px 18px; }
+  .topbar-title { font-size: 15px; margin-bottom: 4px; }
+  .tree-wrapper, .empty-state, .view-picker {
+    height: calc(100vh - 46px);
+    height: calc(100dvh - 46px);
+    min-height: calc(100vh - 46px);
+    min-height: calc(100dvh - 46px);
+  }
+  #pohon-view { height: calc(100vh - 46px); height: calc(100dvh - 46px); }
+  .view-picker { padding: 10px 16px; }
+  .view-picker-title { font-size: 18px; margin-bottom: 4px; }
+  .view-picker-sub { margin-bottom: 12px; }
+  .modal-overlay { padding: 8px; }
+  .modal-card { max-height: 94vh; padding: 18px 20px; }
+  .auth-card { padding: 20px; }
+}
+
+/* Kontainer form/modal mengikuti lebar layar sesungguhnya (portrait
+   sempit atau landscape lebar) memakai satuan relatif (vw/%) dgn batas
+   atas max-width, jadi tidak pernah lebih sempit/lebar dari yang wajar
+   di kedua orientasi. */
+.modal-card, .auth-card { width: min(94vw, 420px); }
+.modal-wide { width: min(94vw, 560px); }
+.modal-relasi { width: min(94vw, 700px); }
 
