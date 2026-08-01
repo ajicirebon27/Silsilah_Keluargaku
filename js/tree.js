@@ -513,6 +513,57 @@ function layoutTree(people, marriages) {
   });
 
   // =====================================================================
+  // TAHAP 1.5 -- PUSATKAN TIAP GENERASI (biar berbentuk "pohon cemara")
+  // TAHAP 1 di atas menyusun tiap generasi rata KIRI mulai dari x=0 secara
+  // independen -- akibatnya leluhur paling atas (yang biasanya cuma 1
+  // pasangan) selalu menempel di pinggir kiri begitu generasi di
+  // bawahnya (anak, cucu, cicit, dst) melebar jauh lebih lebar. Padahal
+  // yang diinginkan: leluhur paling atas tetap di TENGAH-TENGAH, persis
+  // seperti pohon cemara -- sempit & di tengah di puncak, melebar
+  // simetris ke kiri-kanan makin ke bawah.
+  //
+  // Caranya: cari lebar keseluruhan pohon (ditentukan oleh generasi
+  // TERLEBAR, biasanya generasi paling bawah kalau data sudah banyak),
+  // lalu geser tiap generasi lain secara horizontal supaya TITIK
+  // TENGAHnya sejajar dengan titik tengah generasi terlebar itu. Ini
+  // pergeseran kaku per-generasi (jarak antar orang dalam 1 generasi
+  // tidak berubah), jadi tidak merusak logika H_GAP/FAMILY_GAP/COUPLE_GAP
+  // yang sudah dihitung di TAHAP 1, dan berlaku otomatis untuk data
+  // berapa pun banyaknya -- tidak perlu diatur manual per nama orang.
+  // =====================================================================
+  let globalMinX = Infinity, globalMaxX = -Infinity;
+  genKeys.forEach(g => {
+    (byGen.get(g) || []).forEach(pid => {
+      const pos = positions.get(pid);
+      if (!pos) return;
+      globalMinX = Math.min(globalMinX, pos.x);
+      globalMaxX = Math.max(globalMaxX, pos.x + NODE_W);
+    });
+  });
+  if (globalMinX <= globalMaxX) {
+    const globalCenterX = (globalMinX + globalMaxX) / 2;
+    genKeys.forEach(g => {
+      const ids = byGen.get(g) || [];
+      if (!ids.length) return;
+      let genMinX = Infinity, genMaxX = -Infinity;
+      ids.forEach(pid => {
+        const pos = positions.get(pid);
+        if (!pos) return;
+        genMinX = Math.min(genMinX, pos.x);
+        genMaxX = Math.max(genMaxX, pos.x + NODE_W);
+      });
+      const genCenterX = (genMinX + genMaxX) / 2;
+      const offset = globalCenterX - genCenterX;
+      if (Math.abs(offset) > 0.01) {
+        ids.forEach(pid => {
+          const pos = positions.get(pid);
+          if (pos) pos.x += offset;
+        });
+      }
+    });
+  }
+
+  // =====================================================================
   // TAHAP 2 -- KEDALAMAN SIKU (marriageDepth) BERDASARKAN JANGKAUAN NYATA
   // Sekarang semua posisi X (termasuk anak di generasi bawah) sudah
   // diketahui. Untuk SETIAP GENERASI, hitung "jangkauan" (reach) horizontal

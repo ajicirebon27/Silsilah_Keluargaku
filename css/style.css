@@ -1,30 +1,32 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 /* =====================================================================
-   TEMA: Liquid Glass -- biru transparan bergaya "gelas kaca" (glassmorphism)
+   TEMA: Soft White -- putih bersih, lembut, bening, & modern.
    Catatan: nama variabel lama (--blue-*, --green-*) sengaja dipertahankan
    supaya seluruh file lain (tree.js, admin.js, admin.html) otomatis ikut
    berubah tanpa perlu disentuh satu per satu -- hanya NILAI warnanya yang
-   diganti. --blue-* = aksen utama & pria (biru), --green-* = aksen
-   sekunder & wanita (rose/pink hangat, supaya tetap beda dgn biru).
-   Permukaan kartu ("gelas") sengaja dibuat LEBIH PUTIH/terang (opacity
-   lebih tinggi) & teks TIDAK memakai hitam pekat, supaya tetap kontras
-   dan jelas terbaca, bukan hanya sekadar bernuansa gelap.
+   diganti. --blue-* = aksen utama & pria, --green-* = aksen sekunder &
+   wanita. Permukaan kartu dibuat PUTIH BERSIH & nyaris solid (bukan kaca
+   buram/gelap) dengan bayangan sangat lembut, supaya kesan "bening",
+   ringan, dan mudah dibaca -- bukan glassmorphism gelap seperti tema lama.
    ===================================================================== */
 :root {
-  --blue-soft: #60A5FA;   /* biru cerah lembut -- aksen umum & pria */
-  --blue-deep: #1D4ED8;   /* biru tua -- aksen utama, tombol primer, teks aksen */
-  --blue-pale: rgba(37, 99, 235, 0.13);  /* biru sangat pucat -- latar kartu/hover */
-  --green-soft: #F472B6;  /* rose hangat -- aksen sekunder & wanita */
-  --green-deep: #BE185D;  /* rose tua -- aksen sekunder, garis anak */
-  --green-pale: rgba(244, 114, 182, 0.13); /* rose pucat -- latar kartu/hover sekunder */
-  --bg: #EAF2FC;          /* dasar biru langit sangat lembut */
-  --surface: rgba(255, 255, 255, 0.72);  /* "gelas" transparan tapi tetap putih terang, jelas terbaca */
-  --text-main: #1E293B;   /* slate gelap -- BUKAN hitam pekat, tetap kontras & nyaman dibaca */
-  --text-muted: #5B6B85;
-  --border: rgba(255, 255, 255, 0.55);
-  --danger: #C0685C;
-  --radius: 16px;
-  --shadow: 0 8px 28px rgba(29, 78, 216, 0.14);
-  --glass-blur: 18px;
+  --blue-soft: #7CA3F7;   /* biru cerah lembut -- aksen umum & pria */
+  --blue-deep: #3358D8;   /* biru modern -- aksen utama, tombol primer, teks aksen */
+  --blue-pale: rgba(51, 88, 216, 0.07);  /* biru sangat pucat -- latar kartu/hover */
+  --green-soft: #F5A0C6;  /* rose lembut -- aksen sekunder & wanita */
+  --green-deep: #D6478A;  /* rose modern -- aksen sekunder, garis anak */
+  --green-pale: rgba(214, 71, 138, 0.07); /* rose pucat -- latar kartu/hover sekunder */
+  --bg: #F8FAFD;          /* dasar putih kebiruan sangat samar, terasa "bening" */
+  --bg-soft: #F3F5F9;
+  --surface: #FFFFFF;     /* kartu putih bersih & solid, jelas terbaca */
+  --text-main: #232B3D;   /* slate gelap -- BUKAN hitam pekat, tetap kontras & nyaman dibaca */
+  --text-muted: #707B90;
+  --border: #E8ECF3;
+  --danger: #E15C52;
+  --radius: 18px;
+  --shadow: 0 6px 24px rgba(35, 43, 61, 0.07);
+  --glass-blur: 0px;
 }
 
 * { box-sizing: border-box; }
@@ -36,25 +38,25 @@ html, body {
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text-main);
   background-color: var(--bg);
-  /* "Gelembung" kaca biru blur di latar, seperti efek liquid glass */
+  /* Latar putih bersih dengan semburat warna sangat samar di sudut --
+     kesan lembut & modern, tanpa gelembung kaca berwarna mencolok
+     seperti tema sebelumnya. */
   background-image:
-    radial-gradient(circle at 12% 18%, rgba(59, 130, 246, 0.35), transparent 42%),
-    radial-gradient(circle at 88% 12%, rgba(14, 165, 233, 0.30), transparent 46%),
-    radial-gradient(circle at 78% 88%, rgba(37, 99, 235, 0.26), transparent 42%),
-    radial-gradient(circle at 15% 92%, rgba(99, 102, 241, 0.20), transparent 40%),
-    linear-gradient(160deg, #DCEBFB 0%, #D6E8FA 45%, #E7F1FD 100%);
+    radial-gradient(circle at 10% 10%, rgba(124, 163, 247, 0.07), transparent 40%),
+    radial-gradient(circle at 92% 8%, rgba(245, 160, 198, 0.06), transparent 42%),
+    radial-gradient(circle at 85% 95%, rgba(124, 163, 247, 0.05), transparent 40%);
   background-attachment: fixed;
   background-size: cover;
   min-height: 100vh;
   min-height: 100dvh;
 }
 
-/* Kartu/permukaan "kaca": blur di belakangnya supaya warna latar biru
-   tembus samar-samar di baliknya (liquid glass effect), tapi permukaan
-   tetap didominasi warna putih terang supaya isi form/teks jelas terlihat. */
+/* Kartu/permukaan: putih bersih & solid dengan bayangan sangat lembut
+   (lihat --shadow), supaya kesan ringan & "bening" tanpa perlu blur berat
+   seperti glassmorphism gelap pada tema sebelumnya. */
 .topbar, .admin-link, .zoom-controls button, .view-picker-card,
 .modal-card, .jelajah-card-sm, .jelajah-poly-tag, .jelajah-subcard,
 .auth-card, .admin-table, .setting-block, .comment-card, .relasi-result-item,
@@ -79,9 +81,8 @@ body {
   box-shadow: 0 2px 12px rgba(43, 42, 40, 0.04);
 }
 .topbar-title {
-  font-size: clamp(17px, 4.2vw, 19px); font-weight: 700; color: var(--text-main);
-  letter-spacing: 0.2px;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(17px, 4.2vw, 19px); font-weight: 800; color: var(--text-main);
+  letter-spacing: 0.1px;
 }
 .topbar-actions { display: flex; align-items: center; gap: clamp(6px, 1.8vw, 8px); flex-wrap: wrap; }
 .search-box {
@@ -120,9 +121,10 @@ body {
   height: calc(100dvh - 62px);
   overflow: auto;
   cursor: grab;
-  background:
-    radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0);
-  background-size: 24px 24px;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 1px 1px, #DCE3EE 1px, transparent 0);
+  background-size: 26px 26px;
 }
 .tree-wrapper.grabbing { cursor: grabbing; }
 .tree-container {
@@ -146,12 +148,15 @@ body {
 .child-line { stroke: var(--green-deep); stroke-width: 2; }
 .marriage-label { font-size: 10px; font-weight: 600; }
 
-.node-rect { fill: var(--surface); stroke-width: 1.5; }
+.node-rect {
+  fill: var(--surface); stroke-width: 1.5;
+  filter: drop-shadow(0 3px 8px rgba(35, 43, 61, 0.09));
+}
 .node-male .node-rect { stroke: var(--blue-deep); }
 .node-female .node-rect { stroke: var(--green-deep); }
-.node-name { font-size: 13px; font-weight: 600; fill: var(--text-main); }
+.node-name { font-size: 13px; font-weight: 700; fill: var(--text-main); }
 .node-sub { font-size: 11px; fill: var(--text-muted); }
-.tree-node:hover .node-rect { filter: brightness(0.97); }
+.tree-node:hover .node-rect { filter: drop-shadow(0 5px 12px rgba(35, 43, 61, 0.14)); }
 .tree-node.highlight .node-rect { stroke: #D9A441; stroke-width: 3; }
 
 .zoom-controls {
@@ -444,9 +449,9 @@ form label { font-size: 13.5px; font-weight: 600; color: var(--text-muted); disp
   min-height: 100vh; min-height: 100dvh;
   display: flex; align-items: center; justify-content: center;
   background:
-    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.32), transparent 45%),
-    radial-gradient(circle at 85% 80%, rgba(14, 165, 233, 0.32), transparent 45%),
-    linear-gradient(135deg, #D6E8FA, #E7F1FD);
+    radial-gradient(circle at 20% 20%, rgba(124, 163, 247, 0.10), transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(245, 160, 198, 0.09), transparent 45%),
+    linear-gradient(135deg, #FBFCFE, #F5F8FC);
   padding: 16px;
 }
 .auth-card {
@@ -584,7 +589,6 @@ h2, h3 { color: var(--text-main); }
 .biodata-foto-img { width: 100%; height: 100%; object-fit: cover; }
 .biodata-foto-placeholder {
   font-size: 52px; font-weight: 700; color: var(--blue-deep);
-  font-family: Georgia, 'Times New Roman', serif;
 }
 .biodata-gen-badge {
   background: var(--blue-deep); color: #fff;
@@ -597,9 +601,9 @@ h2, h3 { color: var(--text-main); }
 
 .biodata-info-col { flex: 1; min-width: 0; }
 .biodata-nama {
-  margin: 0 0 2px; font-size: 22px; font-weight: 700;
-  color: var(--text-main); font-family: Georgia, 'Times New Roman', serif;
-  letter-spacing: 0.2px;
+  margin: 0 0 2px; font-size: 22px; font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: 0.1px;
 }
 .biodata-alias { color: var(--text-muted); font-size: 14px; font-style: italic; margin-bottom: 14px; }
 
