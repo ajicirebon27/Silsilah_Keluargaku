@@ -161,25 +161,65 @@ function setZoom(scale) {
   treeContainer.style.transformOrigin = 'top left';
 }
 
-// ---------- Search ----------
+// ---------- Cari & Lompat (kotak pencarian di toolbar Pohon Keluarga) ----------
+// Beda dgn tab "Pencarian Data" (biodata/Laporan): kotak ini khusus utk
+// menemukan POSISI orang di kanvas pohon, termasuk kalau leluhurnya
+// sedang diciutkan (collapse) -- lihat TreeControls.revealPerson() di
+// tree.js yg membuka paksa jalur leluhurnya dulu sebelum discroll ke situ.
 function setupSearch() {
-  const input = document.getElementById('search-input');
-  if (!input) return; // kotak pencarian topbar sudah digantikan tab "Pencarian Data"
+  const input = document.getElementById('tree-search-input');
+  const resultsBox = document.getElementById('tree-search-results');
+  if (!input || !resultsBox) return;
+
+  const closeResults = () => { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; };
+
   input.addEventListener('input', () => {
     const q = input.value.trim().toLowerCase();
-    document.querySelectorAll('.tree-node').forEach(node => {
-      const id = node.dataset.id;
-      const person = allPeople.find(p => p.id === id);
-      const match = q && person && person.nama.toLowerCase().includes(q);
-      node.classList.toggle('highlight', !!match);
-    });
-    if (q) {
-      const found = allPeople.find(p => p.nama.toLowerCase().includes(q));
-      if (found) {
-        const el = document.querySelector(`.tree-node[data-id="${found.id}"]`);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-      }
+    if (!q) { closeResults(); return; }
+
+    const matches = allPeople.filter(p => p.nama.toLowerCase().includes(q)).slice(0, 8);
+    if (!matches.length) {
+      resultsBox.innerHTML = `<div class="tree-search-empty">Tidak ditemukan</div>`;
+      resultsBox.style.display = 'block';
+      return;
     }
+    resultsBox.innerHTML = matches.map(p => `
+      <button type="button" class="tree-search-item" data-id="${p.id}">
+        <span class="tree-search-item-nama">${escapeHtml(p.nama)}</span>
+        ${p.tglLahir ? `<span class="tree-search-item-sub">${escapeHtml(formatDate(p.tglLahir))}</span>` : ''}
+      </button>
+    `).join('');
+    resultsBox.style.display = 'block';
+  });
+
+  resultsBox.addEventListener('click', e => {
+    const btn = e.target.closest('.tree-search-item');
+    if (!btn) return;
+    jumpToPersonInTree(btn.dataset.id);
+    closeResults();
+    input.value = '';
+    input.blur();
+  });
+
+  document.addEventListener('click', e => {
+    if (e.target !== input && !resultsBox.contains(e.target)) closeResults();
+  });
+}
+
+// Buka paksa leluhur yg diperlukan (lewat TreeControls.revealPerson), lalu
+// scroll+zoom kanvas ke posisi node itu, dan beri kedipan sesaat (pulse)
+// supaya mata langsung tertuju ke sana di antara banyaknya kotak lain.
+function jumpToPersonInTree(personId) {
+  if (!treeRendered) { showPohonView(); }
+  const found = TreeControls.revealPerson(treeContainer, personId);
+  if (!found) return;
+  // Tunggu 1 frame supaya DOM hasil render ulang (kalau ada) sudah siap.
+  requestAnimationFrame(() => {
+    const el = treeContainer.querySelector(`.tree-node[data-id="${personId}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    el.classList.add('node-pulse');
+    window.setTimeout(() => el.classList.remove('node-pulse'), 1600);
   });
 }
 

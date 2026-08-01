@@ -355,3 +355,19 @@ Setelah selesai, kamu akan punya **1 link tetap** (misal `https://silsilah-kelua
    database), jadi tiap orang yang membuka bisa punya tampilan sendiri, dan
    akan kembali ke "semua terbuka" kalau halaman dimuat ulang. Detail ada
    di bagian atas `js/tree.js` (cari komentar "COLLAPSE / EXPAND KETURUNAN").
+
+---
+
+## Perubahan di v14 (dari v13)
+
+1. **Kotak "Cari & Lompat" di kanvas Pohon Keluarga (baru) --** ada di tab
+   **Pohon Keluarga** (admin) dan mode **Pohon** (publik), tepat di atas
+   kanvas. Ketik nama, pilih dari daftar hasil yang muncul -- sistem akan
+   otomatis **membuka paksa** cabang/leluhur yang sedang diciutkan (kalau
+   ada) di sepanjang jalur menuju orang itu, lalu kanvas otomatis
+   scroll+pusatkan ke posisinya dan kotaknya berkedip sesaat supaya mudah
+   ditemukan mata. Ini beda dari tab "Pencarian Data" (yang menampilkan
+   kartu biodata) -- kotak ini khusus menemukan **posisi** seseorang di
+   dalam pohon, jadi tetap berguna dipakai bersama fitur collapse/expand
+   di atas walau data sudah ratusan orang. Logikanya ada di
+   `getAncestorIds()` dan `TreeControls.revealPerson()` dalam `js/tree.js`.

@@ -167,6 +167,7 @@ async function bootAdmin() {
   setupLaporanTab();
   setupSettings();
   setupDownload();
+  setupTreeSearch();
   await refreshAll();
   await refreshCommentBadge();
   await refreshTrashBadge();
@@ -1310,6 +1311,64 @@ function showSettingFeedback(msg, isError = false) {
 // ======================================================================
 // DOWNLOAD JPG / PDF
 // ======================================================================
+
+// ---------- Cari & Lompat di kanvas Pohon Keluarga (admin) ----------
+// Sama fungsinya dgn kotak pencarian di tampilan publik (lihat setupSearch
+// di app.js) -- khusus menemukan POSISI orang di kanvas pohon admin,
+// termasuk kalau leluhurnya sedang diciutkan (collapse). Beda dari filter
+// nama di tab "Data Orang" yg cuma menyaring baris tabel.
+function setupTreeSearch() {
+  const input = document.getElementById('admin-tree-search-input');
+  const resultsBox = document.getElementById('admin-tree-search-results');
+  if (!input || !resultsBox) return;
+
+  const closeResults = () => { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; };
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) { closeResults(); return; }
+
+    const matches = allPeople.filter(p => p.nama.toLowerCase().includes(q)).slice(0, 8);
+    if (!matches.length) {
+      resultsBox.innerHTML = `<div class="tree-search-empty">Tidak ditemukan</div>`;
+      resultsBox.style.display = 'block';
+      return;
+    }
+    resultsBox.innerHTML = matches.map(p => `
+      <button type="button" class="tree-search-item" data-id="${p.id}">
+        <span class="tree-search-item-nama">${escapeHtml(p.nama)}</span>
+        ${p.tglLahir ? `<span class="tree-search-item-sub">${escapeHtml(formatDate(p.tglLahir))}</span>` : ''}
+      </button>
+    `).join('');
+    resultsBox.style.display = 'block';
+  });
+
+  resultsBox.addEventListener('click', e => {
+    const btn = e.target.closest('.tree-search-item');
+    if (!btn) return;
+    jumpToPersonInAdminTree(btn.dataset.id);
+    closeResults();
+    input.value = '';
+    input.blur();
+  });
+
+  document.addEventListener('click', e => {
+    if (e.target !== input && !resultsBox.contains(e.target)) closeResults();
+  });
+}
+
+function jumpToPersonInAdminTree(personId) {
+  const container = document.getElementById('admin-tree-container');
+  const found = TreeControls.revealPerson(container, personId);
+  if (!found) return;
+  requestAnimationFrame(() => {
+    const el = container.querySelector(`.tree-node[data-id="${personId}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    el.classList.add('node-pulse');
+    window.setTimeout(() => el.classList.remove('node-pulse'), 1600);
+  });
+}
 
 function setupDownload() {
   document.getElementById('btn-tree-expand-all').addEventListener('click', () => {

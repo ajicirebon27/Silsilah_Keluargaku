@@ -137,8 +137,60 @@ const TreeControls = {
     set.clear();
     hasChildrenSet.forEach(id => set.add(id));
     renderTreeSVG(container, last.people, last.marriages, last.onNodeClick);
+  },
+
+  // Dipakai fitur "Cari & Lompat": buka paksa (expand) semua leluhur di
+  // jalur menuju personId -- yang mungkin sedang tersembunyi krn salah
+  // satu leluhurnya di-collapse -- lalu gambar ulang pohon SEKALI supaya
+  // node tujuan pasti ada di DOM. Kembalikan true kalau orangnya ada di
+  // data (terlepas dari perlu re-render atau tidak), false kalau tidak
+  // ditemukan sama sekali (mis. sudah dihapus/di-collapse-filter root
+  // keluarga lain).
+  revealPerson(container, personId) {
+    const last = lastRenderByContainer.get(container);
+    if (!last) return false;
+    if (!last.people.some(p => p.id === personId)) return false;
+
+    const ancestors = getAncestorIds(personId, last.marriages);
+    const set = getCollapsedSet(container);
+    let changed = false;
+    ancestors.forEach(id => {
+      if (set.has(id)) { set.delete(id); changed = true; }
+    });
+    if (changed) renderTreeSVG(container, last.people, last.marriages, last.onNodeClick);
+    return true;
   }
 };
+
+// =====================================================================
+// CARI & LOMPAT ke orang tertentu di kanvas pohon
+// Karena keturunan bisa disembunyikan (collapse), node yang dicari lewat
+// pencarian bisa saja TIDAK ada di DOM sama sekali saat ini (leluhurnya
+// sedang diciutkan). getAncestorIds() menelusuri ke ATAS (ayah/ibu, terus
+// naik) dari 1 orang, dipakai TreeControls.revealPerson() di bawah untuk
+// membuka paksa (expand) setiap leluhur di jalur itu SEBELUM pohon
+// digambar ulang -- supaya orang yang dicari dijamin muncul di DOM dan
+// bisa di-scroll+highlight ke layar.
+// =====================================================================
+function getAncestorIds(personId, marriages) {
+  const parentsByChild = new Map(); // childId -> [parentId, ...]
+  marriages.forEach(m => {
+    (m.childIds || []).forEach(cid => {
+      if (!parentsByChild.has(cid)) parentsByChild.set(cid, []);
+      if (m.orangId1) parentsByChild.get(cid).push(m.orangId1);
+      if (m.orangId2) parentsByChild.get(cid).push(m.orangId2);
+    });
+  });
+  const ancestors = new Set();
+  const queue = [personId];
+  while (queue.length) {
+    const cur = queue.shift();
+    (parentsByChild.get(cur) || []).forEach(pid => {
+      if (!ancestors.has(pid)) { ancestors.add(pid); queue.push(pid); }
+    });
+  }
+  return ancestors;
+}
 
 function buildFamilyGraph(people, marriages) {
   const parentMarriageOfChild = new Map();
