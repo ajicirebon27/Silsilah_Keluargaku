@@ -88,12 +88,76 @@ function translateAuthError(code) {
     'auth/invalid-email': 'Format email tidak valid.',
     'auth/email-already-in-use': 'Email sudah terdaftar.',
     'auth/weak-password': 'Kata sandi minimal 6 karakter.',
-    'auth/invalid-credential': 'Email atau kata sandi salah.'
+    'auth/invalid-credential': 'Email atau kata sandi salah.',
+    'auth/requires-recent-login': 'Sesi login sudah terlalu lama -- masukkan kata sandi saat ini untuk melanjutkan.',
+    'auth/too-many-requests': 'Terlalu banyak percobaan. Coba lagi sebentar lagi.'
   };
   return map[code];
 }
 
+// Reautentikasi ulang dengan email+kata sandi saat ini. Firebase mewajibkan
+// ini sebelum aksi sensitif (ganti email, ganti kata sandi, hapus akun) kalau
+// sesi login sudah agak lama -- dipanggil eksplisit di sini supaya pesan
+// error-nya jelas ("kata sandi saat ini salah") alih-alih baru gagal
+// belakangan dengan kode auth/requires-recent-login yang membingungkan.
+async function reauthCurrentAdmin(currentPassword) {
+  const user = auth.currentUser;
+  if (!user || !user.email) throw new Error('Tidak ada sesi admin yang aktif.');
+  const cred = firebase.auth.EmailAuthProvider.credential(user.email, currentPassword);
+  await user.reauthenticateWithCredential(cred);
+}
+
 document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
+
+// ---------- LUPA KATA SANDI (dari layar login) ----------
+(function setupForgotPassword() {
+  const btn = document.getElementById('forgot-pass-btn');
+  const box = document.getElementById('forgot-pass-box');
+  const emailInput = document.getElementById('forgot-pass-email');
+  const sendBtn = document.getElementById('forgot-pass-send');
+  const feedback = document.getElementById('forgot-pass-feedback');
+
+  btn.addEventListener('click', () => {
+    const opening = box.style.display === 'none';
+    box.style.display = opening ? 'block' : 'none';
+    feedback.textContent = '';
+    if (opening) {
+      const prefill = document.getElementById('auth-email').value.trim();
+      if (prefill) emailInput.value = prefill;
+      emailInput.focus();
+    }
+  });
+
+  sendBtn.addEventListener('click', async () => {
+    const email = emailInput.value.trim();
+    feedback.className = 'forgot-pass-hint';
+    if (!email) {
+      feedback.textContent = 'Isi email admin terlebih dahulu.';
+      return;
+    }
+    sendBtn.disabled = true;
+    try {
+      await auth.sendPasswordResetEmail(email);
+      feedback.textContent = 'Tautan reset kata sandi terkirim. Cek inbox (dan folder spam) email tersebut.';
+    } catch (err) {
+      feedback.textContent = translateAuthError(err.code) || ('Gagal mengirim tautan reset: ' + err.message);
+    } finally {
+      sendBtn.disabled = false;
+    }
+  });
+})();
+
+// ---------- TOGGLE LIHAT/SEMBUNYIKAN KATA SANDI (dipakai di beberapa form) ----------
+document.querySelectorAll('.password-toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const targetId = btn.getAttribute('data-toggle-for');
+    const input = document.getElementById(targetId);
+    if (!input) return;
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    btn.textContent = showing ? 'Lihat' : 'Sembunyikan';
+  });
+});
 
 // ---------- BOOT ADMIN ----------
 async function bootAdmin() {
@@ -1026,6 +1090,9 @@ function setupSettings() {
     refreshRootPersonSelectOptions();
   });
 
+  populateAccountInfo();
+  setupAccountManagement();
+
   document.getElementById('btn-save-title').addEventListener('click', async () => {
     const title = document.getElementById('setting-title').value.trim() || 'Silsilah Keluarga';
     await SettingsAPI.updateAppSettings({ judulAplikasi: title });
@@ -1046,21 +1113,6 @@ function setupSettings() {
       : 'Pembatasan keluarga utama dihapus -- tampilan publik akan menampilkan semua keluarga lagi.');
   });
 
-  document.getElementById('btn-change-pass').addEventListener('click', async () => {
-    const newPass = document.getElementById('setting-newpass').value;
-    if (!newPass || newPass.length < 6) {
-      showSettingFeedback('Kata sandi minimal 6 karakter.', true);
-      return;
-    }
-    try {
-      await auth.currentUser.updatePassword(newPass);
-      document.getElementById('setting-newpass').value = '';
-      showSettingFeedback('Kata sandi berhasil diubah.');
-    } catch (err) {
-      showSettingFeedback('Gagal ubah kata sandi: ' + err.message, true);
-    }
-  });
-
   document.getElementById('btn-export').addEventListener('click', async () => {
     const [people, marriages, comments] = await Promise.all([
       PeopleAPI.getAll(), MarriageAPI.getAll(), CommentAPI.getAll()
@@ -1077,6 +1129,113 @@ function setupSettings() {
   const importInput = document.getElementById('import-file-input');
   document.getElementById('btn-import').addEventListener('click', () => importInput.click());
   importInput.addEventListener('change', handleImportFile);
+}
+
+// Isi kartu info akun admin (email, sejak kapan admin, login terakhir).
+function populateAccountInfo() {
+  const user = auth.currentUser;
+  if (!user) return;
+  const fmt = (iso) => {
+    if (!iso) return '-';
+    try {
+      return new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return '-'; }
+  };
+  document.getElementById('account-info-email').textContent = user.email || '-';
+  document.getElementById('account-info-created').textContent = fmt(user.metadata && user.metadata.creationTime);
+  document.getElementById('account-info-lastlogin').textContent = fmt(user.metadata && user.metadata.lastSignInTime);
+}
+
+// Pasang semua handler untuk blok "Kelola Akun Admin (ID Admin)":
+// ubah email, ubah kata sandi, dan hapus akun -- masing-masing mewajibkan
+// kata sandi saat ini (reautentikasi) sebagai lapis konfirmasi keamanan.
+function setupAccountManagement() {
+  // --- Ubah Email / Username ---
+  document.getElementById('btn-change-email').addEventListener('click', async () => {
+    const newEmail = document.getElementById('acc-new-email').value.trim();
+    const currentPass = document.getElementById('acc-email-currentpass').value;
+    if (!newEmail) { showAccountFeedback('Isi email baru terlebih dahulu.', true); return; }
+    if (!currentPass) { showAccountFeedback('Masukkan kata sandi saat ini untuk konfirmasi.', true); return; }
+
+    const btn = document.getElementById('btn-change-email');
+    btn.disabled = true;
+    try {
+      await reauthCurrentAdmin(currentPass);
+      await auth.currentUser.verifyBeforeUpdateEmail(newEmail);
+      document.getElementById('acc-new-email').value = '';
+      document.getElementById('acc-email-currentpass').value = '';
+      showAccountFeedback(`Tautan verifikasi terkirim ke ${newEmail}. Buka tautan itu untuk menyelesaikan pergantian email -- sampai saat itu, email lama (${auth.currentUser.email}) masih tetap dipakai untuk masuk.`);
+    } catch (err) {
+      showAccountFeedback('Gagal mengubah email: ' + (translateAuthError(err.code) || err.message), true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // --- Ubah Kata Sandi ---
+  document.getElementById('btn-change-pass').addEventListener('click', async () => {
+    const currentPass = document.getElementById('acc-current-pass').value;
+    const newPass = document.getElementById('setting-newpass').value;
+    const confirmPass = document.getElementById('acc-newpass-confirm').value;
+
+    if (!currentPass) { showAccountFeedback('Masukkan kata sandi saat ini.', true); return; }
+    if (!newPass || newPass.length < 6) { showAccountFeedback('Kata sandi baru minimal 6 karakter.', true); return; }
+    if (newPass !== confirmPass) { showAccountFeedback('Konfirmasi kata sandi baru tidak sama.', true); return; }
+
+    const btn = document.getElementById('btn-change-pass');
+    btn.disabled = true;
+    try {
+      await reauthCurrentAdmin(currentPass);
+      await auth.currentUser.updatePassword(newPass);
+      document.getElementById('acc-current-pass').value = '';
+      document.getElementById('setting-newpass').value = '';
+      document.getElementById('acc-newpass-confirm').value = '';
+      showAccountFeedback('Kata sandi berhasil diubah.');
+    } catch (err) {
+      showAccountFeedback('Gagal ubah kata sandi: ' + (translateAuthError(err.code) || err.message), true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // --- Hapus Akun Admin ---
+  document.getElementById('btn-delete-account').addEventListener('click', async () => {
+    const currentPass = document.getElementById('acc-delete-currentpass').value;
+    const confirmText = document.getElementById('acc-delete-confirm-text').value.trim();
+
+    if (!currentPass) { showAccountFeedback('Masukkan kata sandi saat ini.', true); return; }
+    if (confirmText !== 'HAPUS AKUN') { showAccountFeedback('Ketik persis "HAPUS AKUN" untuk konfirmasi.', true); return; }
+
+    const finalOk = confirm(
+      'Anda AKAN MENGHAPUS akun admin ini secara permanen.\n\n' +
+      'Anda akan langsung keluar dan tidak bisa masuk lagi dengan akun ini. ' +
+      'Aplikasi akan kembali meminta pendaftaran admin baru. Data silsilah keluarga TIDAK ikut terhapus.\n\n' +
+      'Lanjutkan hapus akun admin sekarang?'
+    );
+    if (!finalOk) return;
+
+    const btn = document.getElementById('btn-delete-account');
+    btn.disabled = true;
+    try {
+      await reauthCurrentAdmin(currentPass);
+      // Urutan penting: kosongkan dulu slot admin di Firestore SELAGI masih
+      // isAdmin() (uid masih cocok), baru hapus akun Firebase Auth-nya.
+      // Kalau dibalik, begitu akun Auth terhapus, request.auth langsung jadi
+      // null dan penghapusan dokumen settings/admin akan ditolak Rules.
+      await SettingsAPI.resetAdminRegistration();
+      await auth.currentUser.delete();
+      // onAuthStateChanged akan otomatis menampilkan layar "Daftar sebagai Admin".
+    } catch (err) {
+      showAccountFeedback('Gagal menghapus akun: ' + (translateAuthError(err.code) || err.message), true);
+      btn.disabled = false;
+    }
+  });
+}
+
+function showAccountFeedback(msg, isError = false) {
+  const el = document.getElementById('account-feedback');
+  el.textContent = msg;
+  el.className = 'comment-feedback ' + (isError ? 'error' : 'success');
 }
 
 // Isi ulang daftar kandidat "Keluarga Utama" di tab Setting supaya selalu

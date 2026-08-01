@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#3358D8">
+<meta name="theme-color" content="#445D8C">
 <title>Admin - Silsilah Keluarga</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -20,6 +20,15 @@
       <button type="submit" class="btn-primary" id="auth-submit">Masuk</button>
     </form>
     <p id="auth-error" class="auth-error"></p>
+    <button type="button" id="forgot-pass-btn" class="forgot-pass-link">Lupa kata sandi?</button>
+
+    <div id="forgot-pass-box" style="display:none; margin-top:14px; text-align:left;">
+      <label style="font-size:13px; font-weight:600; color:var(--text-muted); display:block; margin-bottom:5px;">Email Admin</label>
+      <input type="email" id="forgot-pass-email" placeholder="Email admin yang terdaftar" style="width:100%; padding:12px 14px; border:1px solid var(--border); background:var(--bg-soft); border-radius:10px; font-size:15px; margin-bottom:10px;">
+      <button type="button" id="forgot-pass-send" class="btn-primary" style="width:100%;">Kirim Tautan Reset Kata Sandi</button>
+      <p id="forgot-pass-feedback" class="forgot-pass-hint"></p>
+    </div>
+
     <a href="index.html" class="back-link">&larr; Kembali ke tampilan publik</a>
   </div>
 </div>
@@ -29,17 +38,17 @@
   <header class="topbar">
     <div class="topbar-title">Panel Admin</div>
     <nav class="admin-nav">
-      <button class="nav-btn active" data-tab="tab-dashboard">Dashboard</button>
-      <button class="nav-btn" data-tab="tab-orang">Data Orang</button>
-      <button class="nav-btn" data-tab="tab-laporan">Laporan</button>
+      <button class="nav-btn active" data-tab="tab-dashboard"><span class="nav-btn-icon">📊</span>Dashboard</button>
+      <button class="nav-btn" data-tab="tab-orang"><span class="nav-btn-icon">👥</span>Data Orang</button>
+      <button class="nav-btn" data-tab="tab-laporan"><span class="nav-btn-icon">📄</span>Laporan</button>
       <button class="nav-btn" data-tab="tab-komentar">
-        Komentar <span id="badge-komentar" class="badge" style="display:none">0</span>
+        <span class="nav-btn-icon">💬</span>Komentar <span id="badge-komentar" class="badge" style="display:none">0</span>
       </button>
-      <button class="nav-btn" data-tab="tab-pohon">Pohon Keluarga</button>
+      <button class="nav-btn" data-tab="tab-pohon"><span class="nav-btn-icon">🌳</span>Pohon Keluarga</button>
       <button class="nav-btn" data-tab="tab-sampah">
-        Sampah <span id="badge-sampah" class="badge" style="display:none">0</span>
+        <span class="nav-btn-icon">🗑️</span>Sampah <span id="badge-sampah" class="badge" style="display:none">0</span>
       </button>
-      <button class="nav-btn" data-tab="tab-setting">Setting</button>
+      <button class="nav-btn" data-tab="tab-setting"><span class="nav-btn-icon">⚙️</span>Setting</button>
     </nav>
     <div class="topbar-actions">
       <a href="index.html" class="admin-link">Lihat Publik</a>
@@ -153,10 +162,78 @@
         <div id="setting-root-person-select"></div>
         <button id="btn-save-root-person" class="btn-primary">Simpan Keluarga Utama</button>
       </div>
-      <div class="setting-block">
-        <label>Ganti Kata Sandi Admin</label>
-        <input type="password" id="setting-newpass" placeholder="Kata sandi baru (min. 6 karakter)" minlength="6">
-        <button id="btn-change-pass" class="btn-primary">Ubah Kata Sandi</button>
+      <div class="setting-block setting-block-wide">
+        <label>Kelola Akun Admin (ID Admin)</label>
+        <p class="setting-hint">Info akun, ubah email/username, ubah kata sandi, atau hapus akun admin ini.</p>
+
+        <div class="account-info-card">
+          <div class="account-info-row">
+            <span class="account-info-label">Email / Username saat ini</span>
+            <span class="account-info-value" id="account-info-email">-</span>
+          </div>
+          <div class="account-info-row">
+            <span class="account-info-label">Admin sejak</span>
+            <span class="account-info-value" id="account-info-created">-</span>
+          </div>
+          <div class="account-info-row">
+            <span class="account-info-label">Masuk terakhir</span>
+            <span class="account-info-value" id="account-info-lastlogin">-</span>
+          </div>
+        </div>
+
+        <!-- Ubah Email/Username -->
+        <div class="account-subblock">
+          <h3>Ubah Email / Username Admin</h3>
+          <p class="account-subblock-hint">Tautan verifikasi akan dikirim ke email baru. Email lama tetap aktif untuk masuk sampai tautan itu dikonfirmasi.</p>
+          <label>Email Baru</label>
+          <input type="email" id="acc-new-email" placeholder="email-baru@contoh.com">
+          <label>Kata Sandi Saat Ini (untuk konfirmasi keamanan)</label>
+          <div class="password-field-wrap">
+            <input type="password" id="acc-email-currentpass" placeholder="Kata sandi saat ini">
+            <button type="button" class="password-toggle-btn" data-toggle-for="acc-email-currentpass">Lihat</button>
+          </div>
+          <button id="btn-change-email" class="btn-primary">Kirim Verifikasi Email Baru</button>
+        </div>
+
+        <!-- Ubah Kata Sandi -->
+        <div class="account-subblock">
+          <h3>Ubah Kata Sandi Admin</h3>
+          <p class="account-subblock-hint">Demi keamanan, masukkan kata sandi lama sebelum mengganti dengan yang baru.</p>
+          <label>Kata Sandi Saat Ini</label>
+          <div class="password-field-wrap">
+            <input type="password" id="acc-current-pass" placeholder="Kata sandi saat ini">
+            <button type="button" class="password-toggle-btn" data-toggle-for="acc-current-pass">Lihat</button>
+          </div>
+          <label>Kata Sandi Baru</label>
+          <div class="password-field-wrap">
+            <input type="password" id="setting-newpass" placeholder="Kata sandi baru (min. 6 karakter)" minlength="6">
+            <button type="button" class="password-toggle-btn" data-toggle-for="setting-newpass">Lihat</button>
+          </div>
+          <label>Ulangi Kata Sandi Baru</label>
+          <div class="password-field-wrap">
+            <input type="password" id="acc-newpass-confirm" placeholder="Ulangi kata sandi baru" minlength="6">
+            <button type="button" class="password-toggle-btn" data-toggle-for="acc-newpass-confirm">Lihat</button>
+          </div>
+          <button id="btn-change-pass" class="btn-primary">Ubah Kata Sandi</button>
+        </div>
+
+        <!-- Hapus Akun Admin -->
+        <div class="danger-zone">
+          <div class="danger-zone-inner">
+            <h3 class="danger-zone-title">Zona Berbahaya: Hapus Akun Admin</h3>
+            <p class="danger-zone-hint">Menghapus akun admin ini akan langsung mengeluarkan Anda dan mengunci akses admin sampai ada yang mendaftar ulang sebagai admin baru (kembali seperti aplikasi baru pertama kali dipakai). Data silsilah keluarga (orang, pernikahan, komentar) <strong>TIDAK</strong> ikut terhapus dan tetap aman. Tindakan ini tidak bisa dibatalkan.</p>
+            <label>Kata Sandi Saat Ini</label>
+            <div class="password-field-wrap">
+              <input type="password" id="acc-delete-currentpass" placeholder="Kata sandi saat ini">
+              <button type="button" class="password-toggle-btn" data-toggle-for="acc-delete-currentpass">Lihat</button>
+            </div>
+            <label>Ketik <strong>HAPUS AKUN</strong> untuk konfirmasi</label>
+            <input type="text" id="acc-delete-confirm-text" placeholder="Ketik: HAPUS AKUN">
+            <button id="btn-delete-account" class="btn-danger">Hapus Akun Admin Permanen</button>
+          </div>
+        </div>
+
+        <p id="account-feedback" class="comment-feedback"></p>
       </div>
       <div class="setting-block">
         <label>Backup Data</label>

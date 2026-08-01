@@ -195,10 +195,21 @@ service cloud.firestore {
         !exists(/databases/$(database)/documents/settings/admin) &&
         request.resource.data.uid == request.auth.uid;
       allow update: if isAdmin();
+      // Diperlukan oleh fitur "Hapus Akun Admin" (tab Setting) -- supaya
+      // slot admin bisa benar-benar dikosongkan lagi (bukan cuma diupdate)
+      // saat admin sengaja menghapus ID-nya sendiri.
+      allow delete: if isAdmin();
     }
   }
 }
 ```
+
+> ⚠️ **Jika kamu sudah pernah publish rules versi sebelum ada `allow delete` di
+> atas** (sebelum fitur "Hapus Akun Admin" ditambahkan): kamu **wajib
+> republish** rules ini di Firebase Console supaya tombol **Hapus Akun Admin**
+> di tab Setting bisa berfungsi. Tanpa ini, penghapusan dokumen
+> `settings/admin` akan ditolak oleh server walau tombolnya sendiri tetap
+> tampil di aplikasi.
 
 > ⚠️ **Jika kamu sudah pernah publish rules versi lama** (sebelum ada UID check
 > di atas), setelah update ke rules baru ini kamu perlu **cek ulang isi dokumen

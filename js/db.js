@@ -232,6 +232,16 @@ const SettingsAPI = {
   // ditolak menulis data karena UID mereka tidak cocok dengan yang tercatat di sini.
   async markAdminRegistered(uid) {
     await db.collection('settings').doc('admin').set({ exists: true, uid });
+  },
+  // Menghapus dokumen settings/admin sepenuhnya. Dipakai HANYA oleh fitur
+  // "Hapus Akun Admin" di tab Setting -- dipanggil SEBELUM akun Firebase Auth
+  // yang bersangkutan dihapus (selagi masih isAdmin()), supaya slot admin
+  // benar-benar kosong lagi dan orang berikutnya yang masuk ke admin.html
+  // akan melihat form "Daftar sebagai Admin" seperti aplikasi baru pertama
+  // kali dipakai. Butuh Firestore Rules yang mengizinkan
+  // `allow delete: if isAdmin();` pada path settings/admin (lihat README).
+  async resetAdminRegistration() {
+    await db.collection('settings').doc('admin').delete();
   }
 };
 

@@ -34,7 +34,7 @@ const GAP_SAFETY = 30;  // jarak aman ekstra di bawah garis rel anak terdalam se
                         // generasi berikutnya dimulai -- supaya siku poligami yg dalam
                         // (banyak istri sesisi) tidak pernah mepet/nembus baris berikutnya.
 
-const DEFAULT_COLOR = '#1D4ED8';
+const DEFAULT_COLOR = '#445D8C';
 
 // =====================================================================
 // COLLAPSE / EXPAND KETURUNAN
