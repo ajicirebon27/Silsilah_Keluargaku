@@ -15,19 +15,11 @@
     <h1 id="auth-title">Masuk Admin</h1>
     <p id="auth-subtitle" class="auth-subtitle">Masuk untuk mengelola data silsilah keluarga.</p>
     <form id="auth-form">
-      <input type="email" id="auth-email" placeholder="Email" required>
-      <input type="password" id="auth-password" placeholder="Kata sandi (min. 6 karakter)" required minlength="6">
+      <input type="text" id="auth-username" placeholder="Username (bebas: huruf, angka, spasi)" required minlength="3" maxlength="50" autocomplete="username">
+      <input type="password" id="auth-password" placeholder="Kata sandi (min. 6 karakter, huruf/angka)" required minlength="6" autocomplete="current-password">
       <button type="submit" class="btn-primary" id="auth-submit">Masuk</button>
     </form>
     <p id="auth-error" class="auth-error"></p>
-    <button type="button" id="forgot-pass-btn" class="forgot-pass-link">Lupa kata sandi?</button>
-
-    <div id="forgot-pass-box" style="display:none; margin-top:14px; text-align:left;">
-      <label style="font-size:13px; font-weight:600; color:var(--text-muted); display:block; margin-bottom:5px;">Email Admin</label>
-      <input type="email" id="forgot-pass-email" placeholder="Email admin yang terdaftar" style="width:100%; padding:12px 14px; border:1px solid var(--border); background:var(--bg-soft); border-radius:10px; font-size:15px; margin-bottom:10px;">
-      <button type="button" id="forgot-pass-send" class="btn-primary" style="width:100%;">Kirim Tautan Reset Kata Sandi</button>
-      <p id="forgot-pass-feedback" class="forgot-pass-hint"></p>
-    </div>
 
     <a href="index.html" class="back-link">&larr; Kembali ke tampilan publik</a>
   </div>
@@ -168,12 +160,12 @@
       </div>
       <div class="setting-block setting-block-wide">
         <label>Kelola Akun Admin (ID Admin)</label>
-        <p class="setting-hint">Info akun, ubah email/username, ubah kata sandi, atau hapus akun admin ini.</p>
+        <p class="setting-hint">Info akun, ubah username, ubah kata sandi, atau hapus akun admin ini.</p>
 
         <div class="account-info-card">
           <div class="account-info-row">
-            <span class="account-info-label">Email / Username saat ini</span>
-            <span class="account-info-value" id="account-info-email">-</span>
+            <span class="account-info-label">Username saat ini</span>
+            <span class="account-info-value" id="account-info-username">-</span>
           </div>
           <div class="account-info-row">
             <span class="account-info-label">Admin sejak</span>
@@ -185,24 +177,24 @@
           </div>
         </div>
 
-        <!-- Ubah Email/Username -->
+        <!-- Ubah Username -->
         <div class="account-subblock">
-          <h3>Ubah Email / Username Admin</h3>
-          <p class="account-subblock-hint">Tautan verifikasi akan dikirim ke email baru. Email lama tetap aktif untuk masuk sampai tautan itu dikonfirmasi.</p>
-          <label>Email Baru</label>
-          <input type="email" id="acc-new-email" placeholder="email-baru@contoh.com">
+          <h3>Ubah Username Admin</h3>
+          <p class="account-subblock-hint">Username baru langsung aktif setelah disimpan (bebas huruf, angka, spasi -- tidak harus format email).</p>
+          <label>Username Baru</label>
+          <input type="text" id="acc-new-username" placeholder="Username baru" minlength="3" maxlength="50">
           <label>Kata Sandi Saat Ini (untuk konfirmasi keamanan)</label>
           <div class="password-field-wrap">
-            <input type="password" id="acc-email-currentpass" placeholder="Kata sandi saat ini">
-            <button type="button" class="password-toggle-btn" data-toggle-for="acc-email-currentpass">Lihat</button>
+            <input type="password" id="acc-username-currentpass" placeholder="Kata sandi saat ini">
+            <button type="button" class="password-toggle-btn" data-toggle-for="acc-username-currentpass">Lihat</button>
           </div>
-          <button id="btn-change-email" class="btn-primary">Kirim Verifikasi Email Baru</button>
+          <button id="btn-change-username" class="btn-primary">Ubah Username</button>
         </div>
 
         <!-- Ubah Kata Sandi -->
         <div class="account-subblock">
           <h3>Ubah Kata Sandi Admin</h3>
-          <p class="account-subblock-hint">Demi keamanan, masukkan kata sandi lama sebelum mengganti dengan yang baru.</p>
+          <p class="account-subblock-hint">Demi keamanan, masukkan kata sandi lama sebelum mengganti dengan yang baru. Kata sandi bebas: huruf, angka, atau gabungan huruf dan angka, minimal 6 karakter.</p>
           <label>Kata Sandi Saat Ini</label>
           <div class="password-field-wrap">
             <input type="password" id="acc-current-pass" placeholder="Kata sandi saat ini">
@@ -210,7 +202,7 @@
           </div>
           <label>Kata Sandi Baru</label>
           <div class="password-field-wrap">
-            <input type="password" id="setting-newpass" placeholder="Kata sandi baru (min. 6 karakter)" minlength="6">
+            <input type="password" id="setting-newpass" placeholder="Kata sandi baru (min. 6 karakter, huruf/angka)" minlength="6">
             <button type="button" class="password-toggle-btn" data-toggle-for="setting-newpass">Lihat</button>
           </div>
           <label>Ulangi Kata Sandi Baru</label>

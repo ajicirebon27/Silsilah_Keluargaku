@@ -281,8 +281,9 @@ Setelah selesai, kamu akan punya **1 link tetap** (misal `https://silsilah-kelua
 ### Daftar sebagai Admin (dilakukan sekali di awal)
 1. Buka link aplikasi, klik **Admin** di pojok kanan atas.
 2. Karena belum ada admin terdaftar, akan muncul form **"Daftar sebagai Admin"**.
-3. Isi email & kata sandi (bebas, minimal 6 karakter), klik **Daftar & Masuk**.
+3. Isi **username** (bebas: huruf, angka, spasi -- tidak harus format email) & **kata sandi** (bebas huruf/angka/gabungan, minimal 6 karakter), klik **Daftar & Masuk**.
 4. Setelah ini, slot admin terkunci — tidak ada yang bisa daftar jadi admin ke-2. Login berikutnya akan otomatis muncul form **"Masuk Admin"**.
+5. Username dan kata sandi bisa diubah kapan saja lewat tab **Setting > Kelola Akun Admin** (perlu masukkan kata sandi saat ini sebagai konfirmasi). Di situ juga ada tombol untuk menghapus akun admin secara permanen kalau diperlukan.
 
 ### Menambah data orang
 1. Di dashboard admin, tab **Data Orang**, klik **+ Tambah Orang**.
@@ -304,7 +305,7 @@ Setelah selesai, kamu akan punya **1 link tetap** (misal `https://silsilah-kelua
 
 - Jangan bagikan isi file `js/firebase-config.js` ke publik secara sembarangan sebagai kode rahasia mutlak — nilai di dalamnya memang terlihat oleh browser (ini normal untuk aplikasi web Firebase), keamanan sesungguhnya diatur lewat **Rules** yang sudah disiapkan di atas (hanya admin yang login bisa ubah data).
 - Ikon aplikasi di folder `icons/` masih berupa desain sederhana bawaan — bisa diganti kapan saja dengan logo keluarga sendiri (ukuran 192x192 dan 512x512 piksel, format PNG, nama file sama).
-- Jika lupa kata sandi admin, pemulihan bisa dilakukan lewat menu **Authentication** di Firebase Console (reset manual).
+- Login admin memakai **username bebas** (bukan email sungguhan) -- di balik layar tetap memakai Firebase Authentication demi keamanan Rules, jadi fitur "lupa kata sandi lewat email" tidak tersedia. Jika lupa kata sandi admin, pemulihan **hanya** bisa dilakukan lewat menu **Authentication** di Firebase Console: cari akun dengan email `<username>@silsilah-admin.local`, lalu reset kata sandinya manual dari sana.
 
 ---
 

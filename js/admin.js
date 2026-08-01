@@ -16,6 +16,56 @@ let currentRelasiFilter = 'all'; // 'all' | 'sudah' | 'belum'
 const authScreen = document.getElementById('auth-screen');
 const adminApp = document.getElementById('admin-app');
 
+// =====================================================================
+// USERNAME BEBAS (BUKAN EMAIL) -- CATATAN PENTING
+// =====================================================================
+// Firebase Authentication (yang menjaga keamanan Firestore Rules lewat
+// request.auth.uid, lihat db.js & README) secara teknis hanya menerima
+// login berformat email. Supaya admin tetap bisa memilih username bebas
+// (huruf/nama apa saja, tidak harus format email) TANPA membongkar seluruh
+// sistem keamanan, username yang diketik admin diubah diam-diam di sini
+// menjadi "email sintetis" pada domain palsu (@silsilah-admin.local) yang
+// dikirim ke Firebase Auth. Konsekuensinya: fitur "reset kata sandi lewat
+// email" tidak bisa dipakai lagi (domain itu tidak menerima email
+// sungguhan) -- kalau admin lupa kata sandi, satu-satunya jalan pemulihan
+// adalah lewat menu Authentication di Firebase Console (lihat README).
+const FAKE_EMAIL_DOMAIN = '@silsilah-admin.local';
+
+function usernameToEmail(username) {
+  const slug = (username || '').trim().toLowerCase()
+    .replace(/\s+/g, '.')          // spasi -> titik, biar aman jadi bagian email
+    .replace(/[^a-z0-9._-]/g, ''); // buang karakter yang tidak valid di email
+  return slug + FAKE_EMAIL_DOMAIN;
+}
+
+// Username bebas: huruf, angka, spasi, titik, underscore, tanda hubung. 3-50 karakter.
+function validateUsername(username) {
+  const val = (username || '').trim();
+  if (val.length < 3 || val.length > 50) {
+    return { ok: false, message: 'Username harus 3-50 karakter.' };
+  }
+  if (!/^[A-Za-z0-9 ._-]+$/.test(val)) {
+    return { ok: false, message: 'Username hanya boleh berisi huruf, angka, spasi, titik, underscore, atau tanda hubung.' };
+  }
+  if (usernameToEmail(val).replace(FAKE_EMAIL_DOMAIN, '') === '') {
+    return { ok: false, message: 'Username harus mengandung setidaknya satu huruf atau angka.' };
+  }
+  return { ok: true };
+}
+
+// Kata sandi bebas: huruf, angka, atau gabungan huruf & angka. Minimal 6
+// karakter (batas minimum ini bawaan Firebase Auth, tidak bisa diturunkan lagi).
+function validatePassword(password) {
+  const val = password || '';
+  if (val.length < 6) {
+    return { ok: false, message: 'Kata sandi minimal 6 karakter.' };
+  }
+  if (!/^[A-Za-z0-9]+$/.test(val)) {
+    return { ok: false, message: 'Kata sandi harus berupa huruf, angka, atau gabungan huruf dan angka (tanpa spasi/simbol).' };
+  }
+  return { ok: true };
+}
+
 // ---------- AUTH ----------
 auth.onAuthStateChanged(async user => {
   if (user) {
@@ -48,10 +98,17 @@ async function setupAuthForm() {
   const form = document.getElementById('auth-form');
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const email = document.getElementById('auth-email').value.trim();
+    const username = document.getElementById('auth-username').value.trim();
     const password = document.getElementById('auth-password').value;
     const errorEl = document.getElementById('auth-error');
     errorEl.textContent = '';
+
+    const userCheck = validateUsername(username);
+    if (!userCheck.ok) { errorEl.textContent = userCheck.message; return; }
+    const passCheck = validatePassword(password);
+    if (!passCheck.ok) { errorEl.textContent = passCheck.message; return; }
+
+    const email = usernameToEmail(username);
 
     try {
       if (isRegistered) {
@@ -64,7 +121,7 @@ async function setupAuthForm() {
         }
         await auth.createUserWithEmailAndPassword(email, password);
         try {
-          await SettingsAPI.markAdminRegistered(auth.currentUser.uid);
+          await SettingsAPI.markAdminRegistered(auth.currentUser.uid, username);
         } catch (settingErr) {
           // Ditolak oleh Firestore Rules -- artinya ada orang lain yang barusan
           // lebih dulu terdaftar sebagai admin (race condition). Akun auth yang
@@ -83,23 +140,24 @@ async function setupAuthForm() {
 
 function translateAuthError(code) {
   const map = {
-    'auth/wrong-password': 'Kata sandi salah.',
-    'auth/user-not-found': 'Akun tidak ditemukan.',
-    'auth/invalid-email': 'Format email tidak valid.',
-    'auth/email-already-in-use': 'Email sudah terdaftar.',
+    'auth/wrong-password': 'Username atau kata sandi salah.',
+    'auth/user-not-found': 'Username atau kata sandi salah.',
+    'auth/invalid-email': 'Username tidak valid.',
+    'auth/email-already-in-use': 'Username sudah dipakai, pilih username lain.',
     'auth/weak-password': 'Kata sandi minimal 6 karakter.',
-    'auth/invalid-credential': 'Email atau kata sandi salah.',
+    'auth/invalid-credential': 'Username atau kata sandi salah.',
     'auth/requires-recent-login': 'Sesi login sudah terlalu lama -- masukkan kata sandi saat ini untuk melanjutkan.',
-    'auth/too-many-requests': 'Terlalu banyak percobaan. Coba lagi sebentar lagi.'
+    'auth/too-many-requests': 'Terlalu banyak percobaan gagal. Coba lagi sebentar lagi.'
   };
   return map[code];
 }
 
-// Reautentikasi ulang dengan email+kata sandi saat ini. Firebase mewajibkan
-// ini sebelum aksi sensitif (ganti email, ganti kata sandi, hapus akun) kalau
-// sesi login sudah agak lama -- dipanggil eksplisit di sini supaya pesan
-// error-nya jelas ("kata sandi saat ini salah") alih-alih baru gagal
-// belakangan dengan kode auth/requires-recent-login yang membingungkan.
+// Reautentikasi ulang dengan email sintetis (dari username) + kata sandi saat
+// ini. Firebase mewajibkan ini sebelum aksi sensitif (ganti username, ganti
+// kata sandi, hapus akun) kalau sesi login sudah agak lama -- dipanggil
+// eksplisit di sini supaya pesan error-nya jelas ("kata sandi saat ini
+// salah") alih-alih baru gagal belakangan dengan kode
+// auth/requires-recent-login yang membingungkan.
 async function reauthCurrentAdmin(currentPassword) {
   const user = auth.currentUser;
   if (!user || !user.email) throw new Error('Tidak ada sesi admin yang aktif.');
@@ -108,44 +166,6 @@ async function reauthCurrentAdmin(currentPassword) {
 }
 
 document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
-
-// ---------- LUPA KATA SANDI (dari layar login) ----------
-(function setupForgotPassword() {
-  const btn = document.getElementById('forgot-pass-btn');
-  const box = document.getElementById('forgot-pass-box');
-  const emailInput = document.getElementById('forgot-pass-email');
-  const sendBtn = document.getElementById('forgot-pass-send');
-  const feedback = document.getElementById('forgot-pass-feedback');
-
-  btn.addEventListener('click', () => {
-    const opening = box.style.display === 'none';
-    box.style.display = opening ? 'block' : 'none';
-    feedback.textContent = '';
-    if (opening) {
-      const prefill = document.getElementById('auth-email').value.trim();
-      if (prefill) emailInput.value = prefill;
-      emailInput.focus();
-    }
-  });
-
-  sendBtn.addEventListener('click', async () => {
-    const email = emailInput.value.trim();
-    feedback.className = 'forgot-pass-hint';
-    if (!email) {
-      feedback.textContent = 'Isi email admin terlebih dahulu.';
-      return;
-    }
-    sendBtn.disabled = true;
-    try {
-      await auth.sendPasswordResetEmail(email);
-      feedback.textContent = 'Tautan reset kata sandi terkirim. Cek inbox (dan folder spam) email tersebut.';
-    } catch (err) {
-      feedback.textContent = translateAuthError(err.code) || ('Gagal mengirim tautan reset: ' + err.message);
-    } finally {
-      sendBtn.disabled = false;
-    }
-  });
-})();
 
 // ---------- TOGGLE LIHAT/SEMBUNYIKAN KATA SANDI (dipakai di beberapa form) ----------
 document.querySelectorAll('.password-toggle-btn').forEach(btn => {
@@ -1132,8 +1152,8 @@ function setupSettings() {
   importInput.addEventListener('change', handleImportFile);
 }
 
-// Isi kartu info akun admin (email, sejak kapan admin, login terakhir).
-function populateAccountInfo() {
+// Isi kartu info akun admin (username, sejak kapan admin, login terakhir).
+async function populateAccountInfo() {
   const user = auth.currentUser;
   if (!user) return;
   const fmt = (iso) => {
@@ -1142,32 +1162,40 @@ function populateAccountInfo() {
       return new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch (e) { return '-'; }
   };
-  document.getElementById('account-info-email').textContent = user.email || '-';
+  const username = await SettingsAPI.getAdminUsername();
+  document.getElementById('account-info-username').textContent = username || '-';
   document.getElementById('account-info-created').textContent = fmt(user.metadata && user.metadata.creationTime);
   document.getElementById('account-info-lastlogin').textContent = fmt(user.metadata && user.metadata.lastSignInTime);
 }
 
 // Pasang semua handler untuk blok "Kelola Akun Admin (ID Admin)":
-// ubah email, ubah kata sandi, dan hapus akun -- masing-masing mewajibkan
+// ubah username, ubah kata sandi, dan hapus akun -- masing-masing mewajibkan
 // kata sandi saat ini (reautentikasi) sebagai lapis konfirmasi keamanan.
 function setupAccountManagement() {
-  // --- Ubah Email / Username ---
-  document.getElementById('btn-change-email').addEventListener('click', async () => {
-    const newEmail = document.getElementById('acc-new-email').value.trim();
-    const currentPass = document.getElementById('acc-email-currentpass').value;
-    if (!newEmail) { showAccountFeedback('Isi email baru terlebih dahulu.', true); return; }
+  // --- Ubah Username ---
+  document.getElementById('btn-change-username').addEventListener('click', async () => {
+    const newUsername = document.getElementById('acc-new-username').value.trim();
+    const currentPass = document.getElementById('acc-username-currentpass').value;
+
+    const check = validateUsername(newUsername);
+    if (!check.ok) { showAccountFeedback(check.message, true); return; }
     if (!currentPass) { showAccountFeedback('Masukkan kata sandi saat ini untuk konfirmasi.', true); return; }
 
-    const btn = document.getElementById('btn-change-email');
+    const btn = document.getElementById('btn-change-username');
     btn.disabled = true;
     try {
       await reauthCurrentAdmin(currentPass);
-      await auth.currentUser.verifyBeforeUpdateEmail(newEmail);
-      document.getElementById('acc-new-email').value = '';
-      document.getElementById('acc-email-currentpass').value = '';
-      showAccountFeedback(`Tautan verifikasi terkirim ke ${newEmail}. Buka tautan itu untuk menyelesaikan pergantian email -- sampai saat itu, email lama (${auth.currentUser.email}) masih tetap dipakai untuk masuk.`);
+      // Username sintetis diubah langsung (tanpa email verifikasi -- domain
+      // sintetis tidak bisa menerima email sungguhan), lalu simpan nama
+      // username aslinya di Firestore supaya bisa ditampilkan apa adanya.
+      await auth.currentUser.updateEmail(usernameToEmail(newUsername));
+      await SettingsAPI.updateAdminUsername(newUsername);
+      document.getElementById('acc-new-username').value = '';
+      document.getElementById('acc-username-currentpass').value = '';
+      await populateAccountInfo();
+      showAccountFeedback(`Username berhasil diubah menjadi "${newUsername}". Gunakan username baru ini untuk login berikutnya.`);
     } catch (err) {
-      showAccountFeedback('Gagal mengubah email: ' + (translateAuthError(err.code) || err.message), true);
+      showAccountFeedback('Gagal mengubah username: ' + (translateAuthError(err.code) || err.message), true);
     } finally {
       btn.disabled = false;
     }
@@ -1180,7 +1208,8 @@ function setupAccountManagement() {
     const confirmPass = document.getElementById('acc-newpass-confirm').value;
 
     if (!currentPass) { showAccountFeedback('Masukkan kata sandi saat ini.', true); return; }
-    if (!newPass || newPass.length < 6) { showAccountFeedback('Kata sandi baru minimal 6 karakter.', true); return; }
+    const check = validatePassword(newPass);
+    if (!check.ok) { showAccountFeedback(check.message, true); return; }
     if (newPass !== confirmPass) { showAccountFeedback('Konfirmasi kata sandi baru tidak sama.', true); return; }
 
     const btn = document.getElementById('btn-change-pass');
