@@ -2,9 +2,9 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Silsilah Keluarga</title>
-<meta name="theme-color" content="#445D8C">
+<meta name="theme-color" content="#4F7CAC">
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -12,85 +12,31 @@
 
 <header class="topbar">
   <div class="topbar-title" id="app-title">Silsilah Keluarga</div>
+  <div class="topbar-actions">
+    <input type="text" id="search-input" placeholder="Cari nama..." class="search-box">
+    <button id="btn-dashboard" class="admin-link">Dashboard</button>
+    <button id="btn-jelajah" class="admin-link">Jelajah</button>
+    <button id="btn-laporan" class="admin-link">Laporan</button>
+    <a href="admin.html" class="admin-link" title="Masuk sebagai Admin">Admin</a>
+  </div>
 </header>
 
 <main>
-  <!-- LAYAR 1 -- Menu Utama: muncul pertama kali begitu program aktif.
-       4 kartu besar menggantikan tab-tab kecil yang dulu ada di topbar. -->
-  <div id="home-menu" class="view-picker" style="display:none">
-    <h1 class="view-picker-title">Selamat Datang</h1>
-    <p class="view-picker-sub">Pilih menu di bawah ini untuk melanjutkan.</p>
-    <div class="view-picker-options view-picker-options-4">
-      <button id="home-silsilah" class="view-picker-card">
-        <div class="view-picker-icon">🌳</div>
-        <div class="view-picker-label">Silsilah</div>
-        <div class="view-picker-desc">Jelajahi silsilah keluarga dalam bentuk kartu atau pohon.</div>
-      </button>
-      <button id="home-dashboard" class="view-picker-card">
-        <div class="view-picker-icon">📊</div>
-        <div class="view-picker-label">Dashboard</div>
-        <div class="view-picker-desc">Ringkasan jumlah data keluarga yang tercatat.</div>
-      </button>
-      <button id="home-laporan" class="view-picker-card">
-        <div class="view-picker-icon">🔍</div>
-        <div class="view-picker-label">Pencarian Data</div>
-        <div class="view-picker-desc">Cari nama seseorang &amp; lihat keterangan hubungan keluarganya.</div>
-      </button>
-      <a href="admin.html" class="view-picker-card view-picker-card-link">
-        <div class="view-picker-icon">🔐</div>
-        <div class="view-picker-label">Admin</div>
-        <div class="view-picker-desc">Masuk untuk mengelola data silsilah keluarga.</div>
-      </a>
-    </div>
-  </div>
-
-  <!-- LAYAR 2 -- Pilihan Tampilan Silsilah: muncul setelah kartu "Silsilah"
-       di Menu Utama diklik -- baru di sini tamu memilih Kartu atau Pohon. -->
-  <div id="view-picker" class="view-picker" style="display:none">
-    <div class="view-picker-backrow">
-      <button id="btn-viewpicker-kembali" class="btn-link">&larr; Kembali ke Menu Utama</button>
-    </div>
-    <h1 class="view-picker-title">Pilih Tampilan Silsilah</h1>
-    <p class="view-picker-sub">Pilih cara kamu ingin menjelajahi data keluarga di bawah ini.</p>
-    <div class="view-picker-options">
-      <button id="pick-kartu" class="view-picker-card">
-        <div class="view-picker-icon">🗂️</div>
-        <div class="view-picker-label">Tampilan Kartu</div>
-        <div class="view-picker-desc">Jelajahi keluarga selangkah demi selangkah -- satu keluarga per layar, mudah diikuti.</div>
-      </button>
-      <button id="pick-pohon" class="view-picker-card">
-        <div class="view-picker-icon">🌳</div>
-        <div class="view-picker-label">Pohon Keluarga</div>
-        <div class="view-picker-desc">Lihat seluruh garis keturunan sekaligus dalam bentuk diagram pohon bergaris.</div>
-      </button>
-    </div>
-  </div>
-
-  <!-- Mode Pohon Keluarga: baru dirender/ditampilkan setelah tamu memilihnya
-       di atas -- bukan otomatis tampil di layar awal. -->
-  <div id="pohon-view" style="display:none">
-    <div class="pohon-topbar">
-      <button id="btn-pohon-kembali" class="btn-link">&larr; Kembali ke Pilihan Tampilan</button>
-    </div>
-    <div class="tree-search-box">
-      <input type="text" id="tree-search-input" placeholder="Cari nama di pohon ini..." autocomplete="off">
-      <div id="tree-search-results" class="tree-search-results" style="display:none"></div>
-    </div>
-    <div id="tree-wrapper" class="tree-wrapper">
-      <div id="tree-container" class="tree-container"></div>
-    </div>
-    <div class="zoom-controls">
-      <button id="zoom-in" aria-label="Perbesar">+</button>
-      <button id="zoom-reset" aria-label="Reset tampilan">⤢</button>
-      <button id="zoom-out" aria-label="Perkecil">−</button>
-      <button id="tree-expand-all" aria-label="Perluas semua keturunan" title="Perluas Semua">&#8862;</button>
-      <button id="tree-collapse-all" aria-label="Ciutkan semua keturunan" title="Ciutkan Semua">&#8863;</button>
-    </div>
+  <div id="tree-wrapper" class="tree-wrapper">
+    <div id="tree-container" class="tree-container"></div>
   </div>
 
   <div id="empty-state" class="empty-state" style="display:none">
     <p>Belum ada data silsilah keluarga.</p>
     <p class="empty-sub">Admin dapat mulai menambahkan data lewat halaman Admin.</p>
+  </div>
+
+  <div class="zoom-controls">
+    <button id="zoom-in" aria-label="Perbesar">+</button>
+    <button id="zoom-reset" aria-label="Reset tampilan">⤢</button>
+    <button id="zoom-out" aria-label="Perkecil">−</button>
+    <button id="tree-expand-all" aria-label="Perluas semua keturunan" title="Perluas Semua">&#8862;</button>
+    <button id="tree-collapse-all" aria-label="Ciutkan semua keturunan" title="Ciutkan Semua">&#8863;</button>
   </div>
 </main>
 
@@ -128,7 +74,7 @@
 <div id="laporan-modal" class="modal-overlay" style="display:none">
   <div class="modal-card modal-wide">
     <button class="modal-close" id="laporan-modal-close">&times;</button>
-    <h2>Pencarian Data &amp; Hubungan Keluarga</h2>
+    <h2>Laporan Hubungan Keluarga</h2>
     <p class="comment-hint">Cari nama untuk melihat keterangan hubungan keluarganya.</p>
 
     <input type="text" id="laporan-search" placeholder="Cari nama orang..." class="relasi-search-box">

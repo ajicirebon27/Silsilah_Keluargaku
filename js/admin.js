@@ -16,56 +16,6 @@ let currentRelasiFilter = 'all'; // 'all' | 'sudah' | 'belum'
 const authScreen = document.getElementById('auth-screen');
 const adminApp = document.getElementById('admin-app');
 
-// =====================================================================
-// USERNAME BEBAS (BUKAN EMAIL) -- CATATAN PENTING
-// =====================================================================
-// Firebase Authentication (yang menjaga keamanan Firestore Rules lewat
-// request.auth.uid, lihat db.js & README) secara teknis hanya menerima
-// login berformat email. Supaya admin tetap bisa memilih username bebas
-// (huruf/nama apa saja, tidak harus format email) TANPA membongkar seluruh
-// sistem keamanan, username yang diketik admin diubah diam-diam di sini
-// menjadi "email sintetis" pada domain palsu (@silsilah-admin.local) yang
-// dikirim ke Firebase Auth. Konsekuensinya: fitur "reset kata sandi lewat
-// email" tidak bisa dipakai lagi (domain itu tidak menerima email
-// sungguhan) -- kalau admin lupa kata sandi, satu-satunya jalan pemulihan
-// adalah lewat menu Authentication di Firebase Console (lihat README).
-const FAKE_EMAIL_DOMAIN = '@silsilah-admin.local';
-
-function usernameToEmail(username) {
-  const slug = (username || '').trim().toLowerCase()
-    .replace(/\s+/g, '.')          // spasi -> titik, biar aman jadi bagian email
-    .replace(/[^a-z0-9._-]/g, ''); // buang karakter yang tidak valid di email
-  return slug + FAKE_EMAIL_DOMAIN;
-}
-
-// Username bebas: huruf, angka, spasi, titik, underscore, tanda hubung. 3-50 karakter.
-function validateUsername(username) {
-  const val = (username || '').trim();
-  if (val.length < 3 || val.length > 50) {
-    return { ok: false, message: 'Username harus 3-50 karakter.' };
-  }
-  if (!/^[A-Za-z0-9 ._-]+$/.test(val)) {
-    return { ok: false, message: 'Username hanya boleh berisi huruf, angka, spasi, titik, underscore, atau tanda hubung.' };
-  }
-  if (usernameToEmail(val).replace(FAKE_EMAIL_DOMAIN, '') === '') {
-    return { ok: false, message: 'Username harus mengandung setidaknya satu huruf atau angka.' };
-  }
-  return { ok: true };
-}
-
-// Kata sandi bebas: huruf, angka, atau gabungan huruf & angka. Minimal 6
-// karakter (batas minimum ini bawaan Firebase Auth, tidak bisa diturunkan lagi).
-function validatePassword(password) {
-  const val = password || '';
-  if (val.length < 6) {
-    return { ok: false, message: 'Kata sandi minimal 6 karakter.' };
-  }
-  if (!/^[A-Za-z0-9]+$/.test(val)) {
-    return { ok: false, message: 'Kata sandi harus berupa huruf, angka, atau gabungan huruf dan angka (tanpa spasi/simbol).' };
-  }
-  return { ok: true };
-}
-
 // ---------- AUTH ----------
 auth.onAuthStateChanged(async user => {
   if (user) {
@@ -98,17 +48,10 @@ async function setupAuthForm() {
   const form = document.getElementById('auth-form');
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const username = document.getElementById('auth-username').value.trim();
+    const email = document.getElementById('auth-email').value.trim();
     const password = document.getElementById('auth-password').value;
     const errorEl = document.getElementById('auth-error');
     errorEl.textContent = '';
-
-    const userCheck = validateUsername(username);
-    if (!userCheck.ok) { errorEl.textContent = userCheck.message; return; }
-    const passCheck = validatePassword(password);
-    if (!passCheck.ok) { errorEl.textContent = passCheck.message; return; }
-
-    const email = usernameToEmail(username);
 
     try {
       if (isRegistered) {
@@ -121,7 +64,7 @@ async function setupAuthForm() {
         }
         await auth.createUserWithEmailAndPassword(email, password);
         try {
-          await SettingsAPI.markAdminRegistered(auth.currentUser.uid, username);
+          await SettingsAPI.markAdminRegistered(auth.currentUser.uid);
         } catch (settingErr) {
           // Ditolak oleh Firestore Rules -- artinya ada orang lain yang barusan
           // lebih dulu terdaftar sebagai admin (race condition). Akun auth yang
@@ -140,44 +83,17 @@ async function setupAuthForm() {
 
 function translateAuthError(code) {
   const map = {
-    'auth/wrong-password': 'Username atau kata sandi salah.',
-    'auth/user-not-found': 'Username atau kata sandi salah.',
-    'auth/invalid-email': 'Username tidak valid.',
-    'auth/email-already-in-use': 'Username sudah dipakai, pilih username lain.',
+    'auth/wrong-password': 'Kata sandi salah.',
+    'auth/user-not-found': 'Akun tidak ditemukan.',
+    'auth/invalid-email': 'Format email tidak valid.',
+    'auth/email-already-in-use': 'Email sudah terdaftar.',
     'auth/weak-password': 'Kata sandi minimal 6 karakter.',
-    'auth/invalid-credential': 'Username atau kata sandi salah.',
-    'auth/requires-recent-login': 'Sesi login sudah terlalu lama -- masukkan kata sandi saat ini untuk melanjutkan.',
-    'auth/too-many-requests': 'Terlalu banyak percobaan gagal. Coba lagi sebentar lagi.'
+    'auth/invalid-credential': 'Email atau kata sandi salah.'
   };
   return map[code];
 }
 
-// Reautentikasi ulang dengan email sintetis (dari username) + kata sandi saat
-// ini. Firebase mewajibkan ini sebelum aksi sensitif (ganti username, ganti
-// kata sandi, hapus akun) kalau sesi login sudah agak lama -- dipanggil
-// eksplisit di sini supaya pesan error-nya jelas ("kata sandi saat ini
-// salah") alih-alih baru gagal belakangan dengan kode
-// auth/requires-recent-login yang membingungkan.
-async function reauthCurrentAdmin(currentPassword) {
-  const user = auth.currentUser;
-  if (!user || !user.email) throw new Error('Tidak ada sesi admin yang aktif.');
-  const cred = firebase.auth.EmailAuthProvider.credential(user.email, currentPassword);
-  await user.reauthenticateWithCredential(cred);
-}
-
 document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
-
-// ---------- TOGGLE LIHAT/SEMBUNYIKAN KATA SANDI (dipakai di beberapa form) ----------
-document.querySelectorAll('.password-toggle-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const targetId = btn.getAttribute('data-toggle-for');
-    const input = document.getElementById(targetId);
-    if (!input) return;
-    const showing = input.type === 'text';
-    input.type = showing ? 'password' : 'text';
-    btn.textContent = showing ? 'Lihat' : 'Sembunyikan';
-  });
-});
 
 // ---------- BOOT ADMIN ----------
 async function bootAdmin() {
@@ -187,7 +103,6 @@ async function bootAdmin() {
   setupLaporanTab();
   setupSettings();
   setupDownload();
-  setupTreeSearch();
   await refreshAll();
   await refreshCommentBadge();
   await refreshTrashBadge();
@@ -244,7 +159,7 @@ function hasRelasiSet(personId) {
 
 function checkIconSVG() {
   return `<svg width="15" height="15" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="12" cy="12" r="12" fill="#1D4ED8"/>
+    <circle cx="12" cy="12" r="12" fill="#4F7CAC"/>
     <path d="M7 12.5l3 3 7-7" stroke="white" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 }
@@ -1111,9 +1026,6 @@ function setupSettings() {
     refreshRootPersonSelectOptions();
   });
 
-  populateAccountInfo();
-  setupAccountManagement();
-
   document.getElementById('btn-save-title').addEventListener('click', async () => {
     const title = document.getElementById('setting-title').value.trim() || 'Silsilah Keluarga';
     await SettingsAPI.updateAppSettings({ judulAplikasi: title });
@@ -1134,6 +1046,21 @@ function setupSettings() {
       : 'Pembatasan keluarga utama dihapus -- tampilan publik akan menampilkan semua keluarga lagi.');
   });
 
+  document.getElementById('btn-change-pass').addEventListener('click', async () => {
+    const newPass = document.getElementById('setting-newpass').value;
+    if (!newPass || newPass.length < 6) {
+      showSettingFeedback('Kata sandi minimal 6 karakter.', true);
+      return;
+    }
+    try {
+      await auth.currentUser.updatePassword(newPass);
+      document.getElementById('setting-newpass').value = '';
+      showSettingFeedback('Kata sandi berhasil diubah.');
+    } catch (err) {
+      showSettingFeedback('Gagal ubah kata sandi: ' + err.message, true);
+    }
+  });
+
   document.getElementById('btn-export').addEventListener('click', async () => {
     const [people, marriages, comments] = await Promise.all([
       PeopleAPI.getAll(), MarriageAPI.getAll(), CommentAPI.getAll()
@@ -1150,122 +1077,6 @@ function setupSettings() {
   const importInput = document.getElementById('import-file-input');
   document.getElementById('btn-import').addEventListener('click', () => importInput.click());
   importInput.addEventListener('change', handleImportFile);
-}
-
-// Isi kartu info akun admin (username, sejak kapan admin, login terakhir).
-async function populateAccountInfo() {
-  const user = auth.currentUser;
-  if (!user) return;
-  const fmt = (iso) => {
-    if (!iso) return '-';
-    try {
-      return new Date(iso).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    } catch (e) { return '-'; }
-  };
-  const username = await SettingsAPI.getAdminUsername();
-  document.getElementById('account-info-username').textContent = username || '-';
-  document.getElementById('account-info-created').textContent = fmt(user.metadata && user.metadata.creationTime);
-  document.getElementById('account-info-lastlogin').textContent = fmt(user.metadata && user.metadata.lastSignInTime);
-}
-
-// Pasang semua handler untuk blok "Kelola Akun Admin (ID Admin)":
-// ubah username, ubah kata sandi, dan hapus akun -- masing-masing mewajibkan
-// kata sandi saat ini (reautentikasi) sebagai lapis konfirmasi keamanan.
-function setupAccountManagement() {
-  // --- Ubah Username ---
-  document.getElementById('btn-change-username').addEventListener('click', async () => {
-    const newUsername = document.getElementById('acc-new-username').value.trim();
-    const currentPass = document.getElementById('acc-username-currentpass').value;
-
-    const check = validateUsername(newUsername);
-    if (!check.ok) { showAccountFeedback(check.message, true); return; }
-    if (!currentPass) { showAccountFeedback('Masukkan kata sandi saat ini untuk konfirmasi.', true); return; }
-
-    const btn = document.getElementById('btn-change-username');
-    btn.disabled = true;
-    try {
-      await reauthCurrentAdmin(currentPass);
-      // Username sintetis diubah langsung (tanpa email verifikasi -- domain
-      // sintetis tidak bisa menerima email sungguhan), lalu simpan nama
-      // username aslinya di Firestore supaya bisa ditampilkan apa adanya.
-      await auth.currentUser.updateEmail(usernameToEmail(newUsername));
-      await SettingsAPI.updateAdminUsername(newUsername);
-      document.getElementById('acc-new-username').value = '';
-      document.getElementById('acc-username-currentpass').value = '';
-      await populateAccountInfo();
-      showAccountFeedback(`Username berhasil diubah menjadi "${newUsername}". Gunakan username baru ini untuk login berikutnya.`);
-    } catch (err) {
-      showAccountFeedback('Gagal mengubah username: ' + (translateAuthError(err.code) || err.message), true);
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  // --- Ubah Kata Sandi ---
-  document.getElementById('btn-change-pass').addEventListener('click', async () => {
-    const currentPass = document.getElementById('acc-current-pass').value;
-    const newPass = document.getElementById('setting-newpass').value;
-    const confirmPass = document.getElementById('acc-newpass-confirm').value;
-
-    if (!currentPass) { showAccountFeedback('Masukkan kata sandi saat ini.', true); return; }
-    const check = validatePassword(newPass);
-    if (!check.ok) { showAccountFeedback(check.message, true); return; }
-    if (newPass !== confirmPass) { showAccountFeedback('Konfirmasi kata sandi baru tidak sama.', true); return; }
-
-    const btn = document.getElementById('btn-change-pass');
-    btn.disabled = true;
-    try {
-      await reauthCurrentAdmin(currentPass);
-      await auth.currentUser.updatePassword(newPass);
-      document.getElementById('acc-current-pass').value = '';
-      document.getElementById('setting-newpass').value = '';
-      document.getElementById('acc-newpass-confirm').value = '';
-      showAccountFeedback('Kata sandi berhasil diubah.');
-    } catch (err) {
-      showAccountFeedback('Gagal ubah kata sandi: ' + (translateAuthError(err.code) || err.message), true);
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  // --- Hapus Akun Admin ---
-  document.getElementById('btn-delete-account').addEventListener('click', async () => {
-    const currentPass = document.getElementById('acc-delete-currentpass').value;
-    const confirmText = document.getElementById('acc-delete-confirm-text').value.trim();
-
-    if (!currentPass) { showAccountFeedback('Masukkan kata sandi saat ini.', true); return; }
-    if (confirmText !== 'HAPUS AKUN') { showAccountFeedback('Ketik persis "HAPUS AKUN" untuk konfirmasi.', true); return; }
-
-    const finalOk = confirm(
-      'Anda AKAN MENGHAPUS akun admin ini secara permanen.\n\n' +
-      'Anda akan langsung keluar dan tidak bisa masuk lagi dengan akun ini. ' +
-      'Aplikasi akan kembali meminta pendaftaran admin baru. Data silsilah keluarga TIDAK ikut terhapus.\n\n' +
-      'Lanjutkan hapus akun admin sekarang?'
-    );
-    if (!finalOk) return;
-
-    const btn = document.getElementById('btn-delete-account');
-    btn.disabled = true;
-    try {
-      await reauthCurrentAdmin(currentPass);
-      // Urutan penting: kosongkan dulu slot admin di Firestore SELAGI masih
-      // isAdmin() (uid masih cocok), baru hapus akun Firebase Auth-nya.
-      // Kalau dibalik, begitu akun Auth terhapus, request.auth langsung jadi
-      // null dan penghapusan dokumen settings/admin akan ditolak Rules.
-      await SettingsAPI.resetAdminRegistration();
-      await auth.currentUser.delete();
-      // onAuthStateChanged akan otomatis menampilkan layar "Daftar sebagai Admin".
-    } catch (err) {
-      showAccountFeedback('Gagal menghapus akun: ' + (translateAuthError(err.code) || err.message), true);
-      btn.disabled = false;
-    }
-  });
-}
-
-function showAccountFeedback(msg, isError = false) {
-  const el = document.getElementById('account-feedback');
-  el.textContent = msg;
-  el.className = 'comment-feedback ' + (isError ? 'error' : 'success');
 }
 
 // Isi ulang daftar kandidat "Keluarga Utama" di tab Setting supaya selalu
@@ -1340,64 +1151,6 @@ function showSettingFeedback(msg, isError = false) {
 // ======================================================================
 // DOWNLOAD JPG / PDF
 // ======================================================================
-
-// ---------- Cari & Lompat di kanvas Pohon Keluarga (admin) ----------
-// Sama fungsinya dgn kotak pencarian di tampilan publik (lihat setupSearch
-// di app.js) -- khusus menemukan POSISI orang di kanvas pohon admin,
-// termasuk kalau leluhurnya sedang diciutkan (collapse). Beda dari filter
-// nama di tab "Data Orang" yg cuma menyaring baris tabel.
-function setupTreeSearch() {
-  const input = document.getElementById('admin-tree-search-input');
-  const resultsBox = document.getElementById('admin-tree-search-results');
-  if (!input || !resultsBox) return;
-
-  const closeResults = () => { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; };
-
-  input.addEventListener('input', () => {
-    const q = input.value.trim().toLowerCase();
-    if (!q) { closeResults(); return; }
-
-    const matches = allPeople.filter(p => p.nama.toLowerCase().includes(q)).slice(0, 8);
-    if (!matches.length) {
-      resultsBox.innerHTML = `<div class="tree-search-empty">Tidak ditemukan</div>`;
-      resultsBox.style.display = 'block';
-      return;
-    }
-    resultsBox.innerHTML = matches.map(p => `
-      <button type="button" class="tree-search-item" data-id="${p.id}">
-        <span class="tree-search-item-nama">${escapeHtml(p.nama)}</span>
-        ${p.tglLahir ? `<span class="tree-search-item-sub">${escapeHtml(formatDate(p.tglLahir))}</span>` : ''}
-      </button>
-    `).join('');
-    resultsBox.style.display = 'block';
-  });
-
-  resultsBox.addEventListener('click', e => {
-    const btn = e.target.closest('.tree-search-item');
-    if (!btn) return;
-    jumpToPersonInAdminTree(btn.dataset.id);
-    closeResults();
-    input.value = '';
-    input.blur();
-  });
-
-  document.addEventListener('click', e => {
-    if (e.target !== input && !resultsBox.contains(e.target)) closeResults();
-  });
-}
-
-function jumpToPersonInAdminTree(personId) {
-  const container = document.getElementById('admin-tree-container');
-  const found = TreeControls.revealPerson(container, personId);
-  if (!found) return;
-  requestAnimationFrame(() => {
-    const el = container.querySelector(`.tree-node[data-id="${personId}"]`);
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-    el.classList.add('node-pulse');
-    window.setTimeout(() => el.classList.remove('node-pulse'), 1600);
-  });
-}
 
 function setupDownload() {
   document.getElementById('btn-tree-expand-all').addEventListener('click', () => {

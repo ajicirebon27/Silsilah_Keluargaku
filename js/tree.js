@@ -34,7 +34,7 @@ const GAP_SAFETY = 30;  // jarak aman ekstra di bawah garis rel anak terdalam se
                         // generasi berikutnya dimulai -- supaya siku poligami yg dalam
                         // (banyak istri sesisi) tidak pernah mepet/nembus baris berikutnya.
 
-const DEFAULT_COLOR = '#445D8C';
+const DEFAULT_COLOR = '#4F7CAC';
 
 // =====================================================================
 // COLLAPSE / EXPAND KETURUNAN
@@ -137,60 +137,8 @@ const TreeControls = {
     set.clear();
     hasChildrenSet.forEach(id => set.add(id));
     renderTreeSVG(container, last.people, last.marriages, last.onNodeClick);
-  },
-
-  // Dipakai fitur "Cari & Lompat": buka paksa (expand) semua leluhur di
-  // jalur menuju personId -- yang mungkin sedang tersembunyi krn salah
-  // satu leluhurnya di-collapse -- lalu gambar ulang pohon SEKALI supaya
-  // node tujuan pasti ada di DOM. Kembalikan true kalau orangnya ada di
-  // data (terlepas dari perlu re-render atau tidak), false kalau tidak
-  // ditemukan sama sekali (mis. sudah dihapus/di-collapse-filter root
-  // keluarga lain).
-  revealPerson(container, personId) {
-    const last = lastRenderByContainer.get(container);
-    if (!last) return false;
-    if (!last.people.some(p => p.id === personId)) return false;
-
-    const ancestors = getAncestorIds(personId, last.marriages);
-    const set = getCollapsedSet(container);
-    let changed = false;
-    ancestors.forEach(id => {
-      if (set.has(id)) { set.delete(id); changed = true; }
-    });
-    if (changed) renderTreeSVG(container, last.people, last.marriages, last.onNodeClick);
-    return true;
   }
 };
-
-// =====================================================================
-// CARI & LOMPAT ke orang tertentu di kanvas pohon
-// Karena keturunan bisa disembunyikan (collapse), node yang dicari lewat
-// pencarian bisa saja TIDAK ada di DOM sama sekali saat ini (leluhurnya
-// sedang diciutkan). getAncestorIds() menelusuri ke ATAS (ayah/ibu, terus
-// naik) dari 1 orang, dipakai TreeControls.revealPerson() di bawah untuk
-// membuka paksa (expand) setiap leluhur di jalur itu SEBELUM pohon
-// digambar ulang -- supaya orang yang dicari dijamin muncul di DOM dan
-// bisa di-scroll+highlight ke layar.
-// =====================================================================
-function getAncestorIds(personId, marriages) {
-  const parentsByChild = new Map(); // childId -> [parentId, ...]
-  marriages.forEach(m => {
-    (m.childIds || []).forEach(cid => {
-      if (!parentsByChild.has(cid)) parentsByChild.set(cid, []);
-      if (m.orangId1) parentsByChild.get(cid).push(m.orangId1);
-      if (m.orangId2) parentsByChild.get(cid).push(m.orangId2);
-    });
-  });
-  const ancestors = new Set();
-  const queue = [personId];
-  while (queue.length) {
-    const cur = queue.shift();
-    (parentsByChild.get(cur) || []).forEach(pid => {
-      if (!ancestors.has(pid)) { ancestors.add(pid); queue.push(pid); }
-    });
-  }
-  return ancestors;
-}
 
 function buildFamilyGraph(people, marriages) {
   const parentMarriageOfChild = new Map();
@@ -563,57 +511,6 @@ function layoutTree(people, marriages) {
       prevFamilyKey = familyKey;
     });
   });
-
-  // =====================================================================
-  // TAHAP 1.5 -- PUSATKAN TIAP GENERASI (biar berbentuk "pohon cemara")
-  // TAHAP 1 di atas menyusun tiap generasi rata KIRI mulai dari x=0 secara
-  // independen -- akibatnya leluhur paling atas (yang biasanya cuma 1
-  // pasangan) selalu menempel di pinggir kiri begitu generasi di
-  // bawahnya (anak, cucu, cicit, dst) melebar jauh lebih lebar. Padahal
-  // yang diinginkan: leluhur paling atas tetap di TENGAH-TENGAH, persis
-  // seperti pohon cemara -- sempit & di tengah di puncak, melebar
-  // simetris ke kiri-kanan makin ke bawah.
-  //
-  // Caranya: cari lebar keseluruhan pohon (ditentukan oleh generasi
-  // TERLEBAR, biasanya generasi paling bawah kalau data sudah banyak),
-  // lalu geser tiap generasi lain secara horizontal supaya TITIK
-  // TENGAHnya sejajar dengan titik tengah generasi terlebar itu. Ini
-  // pergeseran kaku per-generasi (jarak antar orang dalam 1 generasi
-  // tidak berubah), jadi tidak merusak logika H_GAP/FAMILY_GAP/COUPLE_GAP
-  // yang sudah dihitung di TAHAP 1, dan berlaku otomatis untuk data
-  // berapa pun banyaknya -- tidak perlu diatur manual per nama orang.
-  // =====================================================================
-  let globalMinX = Infinity, globalMaxX = -Infinity;
-  genKeys.forEach(g => {
-    (byGen.get(g) || []).forEach(pid => {
-      const pos = positions.get(pid);
-      if (!pos) return;
-      globalMinX = Math.min(globalMinX, pos.x);
-      globalMaxX = Math.max(globalMaxX, pos.x + NODE_W);
-    });
-  });
-  if (globalMinX <= globalMaxX) {
-    const globalCenterX = (globalMinX + globalMaxX) / 2;
-    genKeys.forEach(g => {
-      const ids = byGen.get(g) || [];
-      if (!ids.length) return;
-      let genMinX = Infinity, genMaxX = -Infinity;
-      ids.forEach(pid => {
-        const pos = positions.get(pid);
-        if (!pos) return;
-        genMinX = Math.min(genMinX, pos.x);
-        genMaxX = Math.max(genMaxX, pos.x + NODE_W);
-      });
-      const genCenterX = (genMinX + genMaxX) / 2;
-      const offset = globalCenterX - genCenterX;
-      if (Math.abs(offset) > 0.01) {
-        ids.forEach(pid => {
-          const pos = positions.get(pid);
-          if (pos) pos.x += offset;
-        });
-      }
-    });
-  }
 
   // =====================================================================
   // TAHAP 2 -- KEDALAMAN SIKU (marriageDepth) BERDASARKAN JANGKAUAN NYATA

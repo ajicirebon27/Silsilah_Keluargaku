@@ -226,38 +226,12 @@ const SettingsAPI = {
     const doc = await db.collection('settings').doc('admin').get();
     return doc.exists && doc.data().exists === true;
   },
-  // Ambil username admin yang tersimpan (untuk ditampilkan di kartu info akun
-  // & sebagai fallback kalau perlu). Mengembalikan null kalau belum ada admin
-  // atau field username belum pernah diisi (data lama sebelum fitur ini ada).
-  async getAdminUsername() {
-    const doc = await db.collection('settings').doc('admin').get();
-    if (!doc.exists) return null;
-    return doc.data().username || null;
-  },
-  // Menyimpan UID admin yang sah + username pilihannya (untuk ditampilkan --
-  // bukan untuk login, login tetap lewat email sintetis yang diturunkan dari
-  // username ini, lihat usernameToEmail() di admin.js). Firestore Rules
-  // memverifikasi UID ini setiap kali ada percobaan tulis data (lihat README
-  // bagian Rules) -- jadi walaupun ada orang lain berhasil bikin akun Firebase
-  // Auth sendiri, mereka TETAP ditolak menulis data karena UID mereka tidak
-  // cocok dengan yang tercatat di sini.
-  async markAdminRegistered(uid, username) {
-    await db.collection('settings').doc('admin').set({ exists: true, uid, username: username || null });
-  },
-  // Perbarui hanya field username admin (dipanggil saat admin mengganti
-  // username lewat tab Setting). UID & flag exists tidak disentuh.
-  async updateAdminUsername(username) {
-    await db.collection('settings').doc('admin').set({ username }, { merge: true });
-  },
-  // Menghapus dokumen settings/admin sepenuhnya. Dipakai HANYA oleh fitur
-  // "Hapus Akun Admin" di tab Setting -- dipanggil SEBELUM akun Firebase Auth
-  // yang bersangkutan dihapus (selagi masih isAdmin()), supaya slot admin
-  // benar-benar kosong lagi dan orang berikutnya yang masuk ke admin.html
-  // akan melihat form "Daftar sebagai Admin" seperti aplikasi baru pertama
-  // kali dipakai. Butuh Firestore Rules yang mengizinkan
-  // `allow delete: if isAdmin();` pada path settings/admin (lihat README).
-  async resetAdminRegistration() {
-    await db.collection('settings').doc('admin').delete();
+  // Menyimpan UID admin yang sah. Firestore Rules memverifikasi UID ini setiap
+  // kali ada percobaan tulis data (lihat README bagian Rules) -- jadi walaupun
+  // ada orang lain berhasil bikin akun Firebase Auth sendiri, mereka TETAP
+  // ditolak menulis data karena UID mereka tidak cocok dengan yang tercatat di sini.
+  async markAdminRegistered(uid) {
+    await db.collection('settings').doc('admin').set({ exists: true, uid });
   }
 };
 

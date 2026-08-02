@@ -195,21 +195,10 @@ service cloud.firestore {
         !exists(/databases/$(database)/documents/settings/admin) &&
         request.resource.data.uid == request.auth.uid;
       allow update: if isAdmin();
-      // Diperlukan oleh fitur "Hapus Akun Admin" (tab Setting) -- supaya
-      // slot admin bisa benar-benar dikosongkan lagi (bukan cuma diupdate)
-      // saat admin sengaja menghapus ID-nya sendiri.
-      allow delete: if isAdmin();
     }
   }
 }
 ```
-
-> ⚠️ **Jika kamu sudah pernah publish rules versi sebelum ada `allow delete` di
-> atas** (sebelum fitur "Hapus Akun Admin" ditambahkan): kamu **wajib
-> republish** rules ini di Firebase Console supaya tombol **Hapus Akun Admin**
-> di tab Setting bisa berfungsi. Tanpa ini, penghapusan dokumen
-> `settings/admin` akan ditolak oleh server walau tombolnya sendiri tetap
-> tampil di aplikasi.
 
 > ⚠️ **Jika kamu sudah pernah publish rules versi lama** (sebelum ada UID check
 > di atas), setelah update ke rules baru ini kamu perlu **cek ulang isi dokumen
@@ -281,9 +270,8 @@ Setelah selesai, kamu akan punya **1 link tetap** (misal `https://silsilah-kelua
 ### Daftar sebagai Admin (dilakukan sekali di awal)
 1. Buka link aplikasi, klik **Admin** di pojok kanan atas.
 2. Karena belum ada admin terdaftar, akan muncul form **"Daftar sebagai Admin"**.
-3. Isi **username** (bebas: huruf, angka, spasi -- tidak harus format email) & **kata sandi** (bebas huruf/angka/gabungan, minimal 6 karakter), klik **Daftar & Masuk**.
+3. Isi email & kata sandi (bebas, minimal 6 karakter), klik **Daftar & Masuk**.
 4. Setelah ini, slot admin terkunci — tidak ada yang bisa daftar jadi admin ke-2. Login berikutnya akan otomatis muncul form **"Masuk Admin"**.
-5. Username dan kata sandi bisa diubah kapan saja lewat tab **Setting > Kelola Akun Admin** (perlu masukkan kata sandi saat ini sebagai konfirmasi). Di situ juga ada tombol untuk menghapus akun admin secara permanen kalau diperlukan.
 
 ### Menambah data orang
 1. Di dashboard admin, tab **Data Orang**, klik **+ Tambah Orang**.
@@ -305,7 +293,7 @@ Setelah selesai, kamu akan punya **1 link tetap** (misal `https://silsilah-kelua
 
 - Jangan bagikan isi file `js/firebase-config.js` ke publik secara sembarangan sebagai kode rahasia mutlak — nilai di dalamnya memang terlihat oleh browser (ini normal untuk aplikasi web Firebase), keamanan sesungguhnya diatur lewat **Rules** yang sudah disiapkan di atas (hanya admin yang login bisa ubah data).
 - Ikon aplikasi di folder `icons/` masih berupa desain sederhana bawaan — bisa diganti kapan saja dengan logo keluarga sendiri (ukuran 192x192 dan 512x512 piksel, format PNG, nama file sama).
-- Login admin memakai **username bebas** (bukan email sungguhan) -- di balik layar tetap memakai Firebase Authentication demi keamanan Rules, jadi fitur "lupa kata sandi lewat email" tidak tersedia. Jika lupa kata sandi admin, pemulihan **hanya** bisa dilakukan lewat menu **Authentication** di Firebase Console: cari akun dengan email `<username>@silsilah-admin.local`, lalu reset kata sandinya manual dari sana.
+- Jika lupa kata sandi admin, pemulihan bisa dilakukan lewat menu **Authentication** di Firebase Console (reset manual).
 
 ---
 
@@ -356,19 +344,3 @@ Setelah selesai, kamu akan punya **1 link tetap** (misal `https://silsilah-kelua
    database), jadi tiap orang yang membuka bisa punya tampilan sendiri, dan
    akan kembali ke "semua terbuka" kalau halaman dimuat ulang. Detail ada
    di bagian atas `js/tree.js` (cari komentar "COLLAPSE / EXPAND KETURUNAN").
-
----
-
-## Perubahan di v14 (dari v13)
-
-1. **Kotak "Cari & Lompat" di kanvas Pohon Keluarga (baru) --** ada di tab
-   **Pohon Keluarga** (admin) dan mode **Pohon** (publik), tepat di atas
-   kanvas. Ketik nama, pilih dari daftar hasil yang muncul -- sistem akan
-   otomatis **membuka paksa** cabang/leluhur yang sedang diciutkan (kalau
-   ada) di sepanjang jalur menuju orang itu, lalu kanvas otomatis
-   scroll+pusatkan ke posisinya dan kotaknya berkedip sesaat supaya mudah
-   ditemukan mata. Ini beda dari tab "Pencarian Data" (yang menampilkan
-   kartu biodata) -- kotak ini khusus menemukan **posisi** seseorang di
-   dalam pohon, jadi tetap berguna dipakai bersama fitur collapse/expand
-   di atas walau data sudah ratusan orang. Logikanya ada di
-   `getAncestorIds()` dan `TreeControls.revealPerson()` dalam `js/tree.js`.

@@ -25,69 +25,6 @@ async function init() {
   setupLaporanModal();
   setupDashboardModal();
   setupJelajahModal();
-  setupViewPicker();
-
-  // Revisi: tampilan pertama yang dilihat pengunjung/admin/tamu adalah MENU
-  // UTAMA (4 kartu besar: Silsilah, Dashboard, Pencarian Data, Admin) --
-  // bukan langsung salah satu mode, dan bukan pula kanvas pohon/node yang
-  // otomatis kelihatan. Kartu "Silsilah" baru membawa ke layar pilihan
-  // Kartu/Pohon; pohon sendiri baru digambar begitu mode Pohon dipilih.
-  if (allPeople.length > 0) showHomeMenu();
-}
-
-// ---------- Menu Utama & Layar Pilihan Tampilan (Kartu / Pohon) ----------
-let treeRendered = false;
-
-function isRootFixed() {
-  const rootId = appSettings.rootPersonId;
-  return !!(rootId && allPeople.some(p => p.id === rootId));
-}
-
-function setupViewPicker() {
-  document.getElementById('home-silsilah').addEventListener('click', showSilsilahPicker);
-  document.getElementById('home-dashboard').addEventListener('click', openDashboardModal);
-  document.getElementById('home-laporan').addEventListener('click', openLaporanModal);
-  document.getElementById('pick-kartu').addEventListener('click', showKartuView);
-  document.getElementById('pick-pohon').addEventListener('click', showPohonView);
-  document.getElementById('btn-viewpicker-kembali').addEventListener('click', showHomeMenu);
-  document.getElementById('btn-pohon-kembali').addEventListener('click', showSilsilahPicker);
-}
-
-// Layar paling awal/utama -- 4 kartu menu.
-function showHomeMenu() {
-  closeJelajahModal();
-  document.getElementById('view-picker').style.display = 'none';
-  document.getElementById('pohon-view').style.display = 'none';
-  document.getElementById('home-menu').style.display = 'flex';
-}
-
-// Layar ke-2, khusus kartu "Silsilah" -- pilih Kartu atau Pohon.
-function showSilsilahPicker() {
-  closeJelajahModal();
-  document.getElementById('home-menu').style.display = 'none';
-  document.getElementById('pohon-view').style.display = 'none';
-  document.getElementById('view-picker').style.display = 'flex';
-}
-
-function showPohonView() {
-  document.getElementById('view-picker').style.display = 'none';
-  document.getElementById('pohon-view').style.display = 'flex';
-  renderTreeIfNeeded();
-}
-
-function showKartuView() {
-  document.getElementById('view-picker').style.display = 'none';
-  openJelajahModal();
-}
-
-// Pohon baru digambar sekali, saat pertama kali tamu memilih mode Pohon --
-// bukan otomatis saat halaman dimuat -- supaya layar awal bebas dari
-// tampilan node/garis yang bisa terasa penuh/mengganggu mata.
-function renderTreeIfNeeded() {
-  if (treeRendered) return;
-  renderTreeSVG(treeContainer, allPeople, allMarriages, openDetail);
-  TreeControls.collapseAll(treeContainer);
-  treeRendered = true;
 }
 
 async function loadData() {
@@ -121,9 +58,17 @@ async function loadData() {
     document.getElementById('empty-state').style.display = 'flex';
     return;
   }
-  // Catatan: pohon (SVG) TIDAK dirender di sini lagi -- baru digambar lewat
-  // renderTreeIfNeeded() saat tamu memilih mode "Pohon Keluarga" di layar
-  // pilihan tampilan, supaya layar awal bersih dari node/garis.
+  renderTreeSVG(treeContainer, allPeople, allMarriages, openDetail);
+
+  // Halaman publik: sembunyikan SEMUA keturunan secara default saat pertama
+  // dibuka, jadi yang tamu lihat pertama kali cuma leluhur paling atas
+  // (mis. Bapak Darsa & Ibu Kesi) -- bukan seluruh pohon sekaligus yang
+  // bisa terasa penuh/membingungkan. Tamu lalu klik lencana "+" pada kotak
+  // seseorang utk membuka (unhide) keturunannya satu per satu, lengkap
+  // dgn animasi fade singkat yang sudah ditangani oleh toggleTreeNode()
+  // di tree.js. Ini TIDAK memengaruhi tampilan admin (admin punya
+  // container SVG sendiri, statusnya disimpan terpisah per container).
+  TreeControls.collapseAll(treeContainer);
 }
 
 // ---------- Pan & Zoom ----------
@@ -161,65 +106,24 @@ function setZoom(scale) {
   treeContainer.style.transformOrigin = 'top left';
 }
 
-// ---------- Cari & Lompat (kotak pencarian di toolbar Pohon Keluarga) ----------
-// Beda dgn tab "Pencarian Data" (biodata/Laporan): kotak ini khusus utk
-// menemukan POSISI orang di kanvas pohon, termasuk kalau leluhurnya
-// sedang diciutkan (collapse) -- lihat TreeControls.revealPerson() di
-// tree.js yg membuka paksa jalur leluhurnya dulu sebelum discroll ke situ.
+// ---------- Search ----------
 function setupSearch() {
-  const input = document.getElementById('tree-search-input');
-  const resultsBox = document.getElementById('tree-search-results');
-  if (!input || !resultsBox) return;
-
-  const closeResults = () => { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; };
-
+  const input = document.getElementById('search-input');
   input.addEventListener('input', () => {
     const q = input.value.trim().toLowerCase();
-    if (!q) { closeResults(); return; }
-
-    const matches = allPeople.filter(p => p.nama.toLowerCase().includes(q)).slice(0, 8);
-    if (!matches.length) {
-      resultsBox.innerHTML = `<div class="tree-search-empty">Tidak ditemukan</div>`;
-      resultsBox.style.display = 'block';
-      return;
+    document.querySelectorAll('.tree-node').forEach(node => {
+      const id = node.dataset.id;
+      const person = allPeople.find(p => p.id === id);
+      const match = q && person && person.nama.toLowerCase().includes(q);
+      node.classList.toggle('highlight', !!match);
+    });
+    if (q) {
+      const found = allPeople.find(p => p.nama.toLowerCase().includes(q));
+      if (found) {
+        const el = document.querySelector(`.tree-node[data-id="${found.id}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      }
     }
-    resultsBox.innerHTML = matches.map(p => `
-      <button type="button" class="tree-search-item" data-id="${p.id}">
-        <span class="tree-search-item-nama">${escapeHtml(p.nama)}</span>
-        ${p.tglLahir ? `<span class="tree-search-item-sub">${escapeHtml(formatDate(p.tglLahir))}</span>` : ''}
-      </button>
-    `).join('');
-    resultsBox.style.display = 'block';
-  });
-
-  resultsBox.addEventListener('click', e => {
-    const btn = e.target.closest('.tree-search-item');
-    if (!btn) return;
-    jumpToPersonInTree(btn.dataset.id);
-    closeResults();
-    input.value = '';
-    input.blur();
-  });
-
-  document.addEventListener('click', e => {
-    if (e.target !== input && !resultsBox.contains(e.target)) closeResults();
-  });
-}
-
-// Buka paksa leluhur yg diperlukan (lewat TreeControls.revealPerson), lalu
-// scroll+zoom kanvas ke posisi node itu, dan beri kedipan sesaat (pulse)
-// supaya mata langsung tertuju ke sana di antara banyaknya kotak lain.
-function jumpToPersonInTree(personId) {
-  if (!treeRendered) { showPohonView(); }
-  const found = TreeControls.revealPerson(treeContainer, personId);
-  if (!found) return;
-  // Tunggu 1 frame supaya DOM hasil render ulang (kalau ada) sudah siap.
-  requestAnimationFrame(() => {
-    const el = treeContainer.querySelector(`.tree-node[data-id="${personId}"]`);
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-    el.classList.add('node-pulse');
-    window.setTimeout(() => el.classList.remove('node-pulse'), 1600);
   });
 }
 
@@ -307,6 +211,7 @@ function closeDetail() {
 let laporanSelectedId = null;
 
 function setupLaporanModal() {
+  document.getElementById('btn-laporan').addEventListener('click', openLaporanModal);
   document.getElementById('laporan-modal-close').addEventListener('click', closeLaporanModal);
   document.getElementById('laporan-modal').addEventListener('click', e => {
     if (e.target.id === 'laporan-modal') closeLaporanModal();
@@ -366,6 +271,7 @@ function selectLaporanPerson(id) {
 
 // ---------- Modal Dashboard (ringkasan statistik) ----------
 function setupDashboardModal() {
+  document.getElementById('btn-dashboard').addEventListener('click', openDashboardModal);
   document.getElementById('dashboard-modal-close').addEventListener('click', closeDashboardModal);
   document.getElementById('dashboard-modal').addEventListener('click', e => {
     if (e.target.id === 'dashboard-modal') closeDashboardModal();
@@ -421,9 +327,10 @@ let jelajahCurrentPickerEntries = [];  // entry level-leluhur yg sedang tampil s
 let jelajahShowChildren = false;
 
 function setupJelajahModal() {
-  document.getElementById('jelajah-modal-close').addEventListener('click', showSilsilahPicker);
+  document.getElementById('btn-jelajah').addEventListener('click', openJelajahModal);
+  document.getElementById('jelajah-modal-close').addEventListener('click', closeJelajahModal);
   document.getElementById('jelajah-modal').addEventListener('click', e => {
-    if (e.target.id === 'jelajah-modal') showSilsilahPicker();
+    if (e.target.id === 'jelajah-modal') closeJelajahModal();
   });
 }
 
@@ -529,18 +436,7 @@ function jelajahBukaAnak() {
   renderJelajah();
 }
 
-// Tombol "Kembali" selalu mundur PERSIS SATU LANGKAH sesuai urutan tamu
-// masuk (hulu -> hilir saat maju, hilir -> hulu saat mundur). Kalau sudah
-// berada di level paling atas (leluhur awal, atau leluhur tetap kalau admin
-// sudah menyetel "Keluarga Utama"), langkah mundur berikutnya membawa tamu
-// keluar dari mode Kartu, kembali ke layar Pilihan Tampilan paling awal --
-// bukan berhenti begitu saja di tengah jalan.
 function jelajahKembali() {
-  const sudahDiLevelAwal = isRootFixed() ? jelajahPath.length <= 1 : jelajahPath.length <= 0;
-  if (sudahDiLevelAwal) {
-    showSilsilahPicker();
-    return;
-  }
   jelajahPath.pop();
   jelajahShowChildren = true; // level ini sebelumnya memang sudah dibuka (asal bisa turun ke bawahnya)
   renderJelajah();
@@ -689,7 +585,6 @@ function renderJelajah() {
         ${jelajahCurrentPickerEntries.map((entry, i) => renderJelajahEntryCard(entry, i)).join('')
           || '<p class="jelajah-muted">Belum ada data orang.</p>'}
       </div>
-      <div class="jelajah-back-row"><button class="btn-link" onclick="jelajahKembali()">&larr; Kembali ke Pilihan Tampilan</button></div>
     `;
     return;
   }

@@ -4,8 +4,8 @@
   "description": "Aplikasi pohon keluarga / silsilah keturunan",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#FAF7F1",
-  "theme_color": "#445D8C",
+  "background_color": "#FAFBFC",
+  "theme_color": "#4F7CAC",
   "orientation": "any",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
