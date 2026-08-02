@@ -58,7 +58,16 @@ async function loadData() {
     document.getElementById('empty-state').style.display = 'flex';
     return;
   }
-  renderTreeSVG(treeContainer, allPeople, allMarriages, openDetail);
+  // rootIds (pasangan utama, mis. [idDarsa, idKesi]) dipakai tree.js utk
+  // menyembunyikan default akar keluarga lain yg tdk berkerabat (lihat
+  // computeAlienRootIds di tree.js). Di tampilan publik ini sebetulnya
+  // biasanya sudah tidak ada leluhur lain lagi (kalau rootPersonId diisi,
+  // people/marriages di atas sudah disaring FamilyGraph ke 1 keluarga saja)
+  // -- tapi tetap dikirim supaya perilakunya konsisten dgn tab admin, dan
+  // tetap berguna kalau rootPersonId TIDAK diisi (tampilan publik memuat
+  // semua keluarga sekaligus).
+  const rootIds = RelationRules.findDefaultTreeRootIds(allPeople, allMarriages, appSettings.rootPersonId);
+  renderTreeSVG(treeContainer, allPeople, allMarriages, openDetail, rootIds);
 
   // Halaman publik: sembunyikan SEMUA keturunan secara default saat pertama
   // dibuka, jadi yang tamu lihat pertama kali cuma leluhur paling atas
@@ -69,6 +78,12 @@ async function loadData() {
   // di tree.js. Ini TIDAK memengaruhi tampilan admin (admin punya
   // container SVG sendiri, statusnya disimpan terpisah per container).
   TreeControls.collapseAll(treeContainer);
+
+  // v15: setelah diciutkan, geser viewport supaya kotak leluhur utama (mis.
+  // Bapak Darsa & Ibu Kesi) langsung terlihat di tengah layar begitu pohon
+  // dibuka -- bukan pojok kiri-atas kanvas apa adanya (lihat
+  // RelationRules.findDefaultTreeFocusId() di db.js utk urutan prioritasnya).
+  TreeControls.focusOn(treeContainer, RelationRules.findDefaultTreeFocusId(allPeople, allMarriages, appSettings.rootPersonId));
 }
 
 // ---------- Pan & Zoom ----------

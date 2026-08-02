@@ -19,6 +19,8 @@
       <button type="submit" class="btn-primary" id="auth-submit">Masuk</button>
     </form>
     <p id="auth-error" class="auth-error"></p>
+    <p id="auth-info" class="auth-info"></p>
+    <button type="button" id="auth-forgot-btn" class="btn-link auth-forgot-link" style="display:none">Lupa kata sandi?</button>
     <a href="index.html" class="back-link">&larr; Kembali ke tampilan publik</a>
   </div>
 </div>
@@ -113,6 +115,7 @@
     <section id="tab-pohon" class="tab-panel">
       <div class="panel-header">
         <h2>Pohon Keluarga</h2>
+        <input type="text" id="admin-tree-search" placeholder="Cari nama di pohon...">
         <div>
           <button id="btn-tree-expand-all" class="btn-secondary">Perluas Semua</button>
           <button id="btn-tree-collapse-all" class="btn-secondary">Ciutkan Semua</button>
@@ -159,7 +162,10 @@
       </div>
       <div class="setting-block">
         <label>Backup Data</label>
-        <p class="setting-hint">Unduh seluruh data (orang, pernikahan, komentar) sebagai file cadangan.</p>
+        <p class="setting-hint">Unduh seluruh data (orang, pernikahan, komentar, judul aplikasi, dan pengaturan Keluarga Utama) sebagai file cadangan.</p>
+        <p class="setting-warning">⚠️ File ini berisi data pribadi lengkap keluarga (nama, tanggal lahir, alamat,
+          nomor HP, foto). <strong>Jangan bagikan file ini ke grup WhatsApp/publik</strong> --
+          simpan hanya di penyimpanan pribadi kamu (mis. Google Drive milik sendiri, bukan folder bersama).</p>
         <button id="btn-export" class="btn-secondary">Export Data (JSON)</button>
       </div>
       <div class="setting-block">

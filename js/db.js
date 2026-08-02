@@ -10,6 +10,17 @@
 //   settings/admin: { exists: true }
 // =====================================================================
 
+// Escape karakter HTML berbahaya sebelum dimasukkan ke innerHTML lewat template
+// string -- dipakai di HAMPIR SEMUA file (db.js dimuat paling awal di kedua
+// halaman, jadi ini satu-satunya definisi; sebelumnya sempat terduplikasi
+// persis sama di tree.js & admin.js -- v14: disatukan di sini supaya tidak
+// ada risiko 2 salinan yang diam-diam berbeda kalau salah satunya diedit).
+function escapeHtml(str) {
+  return (str || '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[c]);
+}
+
 // Pulihkan field bertipe Timestamp Firestore yang "rusak" jadi objek biasa
 // {seconds, nanoseconds} setelah lewat JSON.stringify/parse (dipakai saat restore backup).
 function restoreTimestampField(value) {
@@ -274,6 +285,21 @@ const RelationRules = {
     return [...ids];
   },
 
+  // Semua pasangan (suami/istri) seseorang dari SELURUH pernikahannya
+  // (mendukung poligami -- bisa lebih dari 1). Dipakai mis. utk menentukan
+  // rootIds pohon keluarga: bukan cuma leluhur utama (mis. Bapak Darsa)
+  // sendirian, tapi juga pasangannya (Ibu Kesi), supaya keduanya sama-sama
+  // dianggap bagian dari "keluarga utama" saat menyaring leluhur lain yang
+  // tidak berkerabat (lihat computeAlienRootIds di tree.js).
+  getSpouseIds(personId, marriages) {
+    const ids = new Set();
+    marriages.forEach(m => {
+      if (m.orangId1 === personId && m.orangId2) ids.add(m.orangId2);
+      else if (m.orangId2 === personId && m.orangId1) ids.add(m.orangId1);
+    });
+    return [...ids];
+  },
+
   // Saudara kandung (2 ortu sama) + saudara tiri (1 ortu sama)
   getSiblings(personId, people, marriages) {
     const { ayah, ibu } = this.getParents(personId, people, marriages);
@@ -374,6 +400,44 @@ const RelationRules = {
       leluhurNama: rootPerson ? rootPerson.nama : null,
       isLeluhurSendiri: rootId === personId
     };
+  },
+
+  // v15: tentukan siapa yang jadi FOKUS DEFAULT saat pohon keluarga pertama
+  // kali dibuka (dipakai bersama tampilan publik & tab "Pohon Keluarga" admin
+  // -- lihat TreeControls.focusOn() di tree.js utk yang menggeser viewport-nya).
+  // Urutan prioritas:
+  //   1. rootPersonId dari Setting "Keluarga Utama untuk Tampilan Publik" --
+  //      ini cara PALING ANDAL karena eksplisit diatur admin, dipakai kalau ada.
+  //   2. Pencarian nama mengandung "darsa" (case-insensitive) -- cocok dgn
+  //      permintaan spesifik: fokus default ke Bapak Darsa & Ibu Kesi, jalan
+  //      otomatis walau admin belum sempat mengisi Setting di atas.
+  //   3. Fallback terakhir: leluhur pertama yang ditemukan (orang tanpa ortu
+  //      tercatat) -- supaya tetap ada fokus yang masuk akal walau nama
+  //      "Darsa" tidak ditemukan sama sekali di data.
+  findDefaultTreeFocusId(people, marriages, rootPersonId) {
+    if (rootPersonId && people.some(p => p.id === rootPersonId)) return rootPersonId;
+
+    const byName = people.find(p => (p.nama || '').trim().toLowerCase().includes('darsa'));
+    if (byName) return byName.id;
+
+    const firstRoot = people.find(p => {
+      const { ayah, ibu } = this.getParents(p.id, people, marriages);
+      return !ayah && !ibu;
+    });
+    return firstRoot ? firstRoot.id : null;
+  },
+
+  // v16: kumpulan id "pasangan utama" (bukan cuma 1 orang) yang dipakai
+  // tree.js utk menyaring leluhur lain yang tidak berkerabat (lihat
+  // computeAlienRootIds di tree.js). Dimulai dari findDefaultTreeFocusId()
+  // di atas (mis. Bapak Darsa), lalu ikut menyertakan SEMUA pasangannya
+  // (mis. Ibu Kesi, dan istri/suami lain kalau poligami) supaya keduanya
+  // sama-sama dianggap "keluarga utama" -- bukan cuma satu sisi saja yang
+  // membuat sisi pasangannya justru dianggap "leluhur lain" & tersembunyi.
+  findDefaultTreeRootIds(people, marriages, rootPersonId) {
+    const focusId = this.findDefaultTreeFocusId(people, marriages, rootPersonId);
+    if (!focusId) return [];
+    return [focusId, ...this.getSpouseIds(focusId, marriages)];
   },
 
 

@@ -1,5 +1,55 @@
 # Silsilah Keluarga — Panduan Setup
 
+> **Baru di versi ini (v15) -- Fokus default ke leluhur utama saat Pohon
+> Keluarga pertama dibuka:**
+> Sebelumnya, tampilan publik sudah default menciutkan semua keturunan saat
+> pertama dibuka (v13), tapi tab **Pohon Keluarga** di panel **admin** masih
+> selalu tampil terbuka penuh -- dan di kedua tempat, posisi scroll awal
+> mengikuti tata letak kanvas apa adanya (belum tentu langsung menampilkan
+> Bapak Darsa & Ibu Kesi di layar tanpa perlu scroll manual dulu). Sekarang:
+> - Tab **Pohon Keluarga** (admin) ikut default **ciutkan semua** saat
+>   pertama dibuka setiap sesi login (bukan lagi selalu terbuka penuh).
+>   Status ciut/lebar ini HANYA berlaku sekali di awal sesi -- setelah admin
+>   mulai meng-expand cabang tertentu untuk bekerja, status itu tidak
+>   dipaksa ciut ulang lagi tiap habis menyimpan sesuatu.
+> - Baik tampilan **publik** maupun **admin**, begitu dibuka, viewport
+>   otomatis digeser supaya kotak **Bapak Darsa & Ibu Kesi** langsung
+>   terlihat di tengah layar -- bukan pojok kiri-atas kanvas apa adanya.
+> - Fokus ke Bapak Darsa ini jalan otomatis (dicocokkan lewat nama), TIDAK
+>   perlu setting tambahan apapun. Tapi cara yang lebih andal & disarankan
+>   tetap lewat **Setting > Keluarga Utama untuk Tampilan Publik** (pilih
+>   Bapak Darsa dari dropdown) -- kalau diisi, itu yang dipakai duluan
+>   sebagai fokus (lihat `RelationRules.findDefaultTreeFocusId()` di
+>   `js/db.js` untuk urutan prioritas lengkapnya).
+
+> **Baru di versi ini (v14) -- Batch 5, perbaikan operasional & keandalan:**
+> 1. **Lupa kata sandi admin (mandiri).** Sebelumnya reset password admin
+>    HARUS lewat Firebase Console secara manual. Sekarang ada tombol "Lupa
+>    kata sandi?" di layar login yang mengirim link reset ke email admin
+>    lewat Firebase Auth langsung -- tidak perlu buka Firebase Console lagi.
+> 2. **Backup ikut menyimpan pengaturan aplikasi.** Export Data (JSON)
+>    sekarang ikut menyertakan judul aplikasi & pengaturan "Keluarga Utama
+>    untuk Tampilan Publik" (sebelumnya hanya data orang/pernikahan/komentar
+>    -- pengaturan ini hilang kalau restore ke project Firebase baru). Import
+>    juga otomatis memulihkan pengaturan ini kalau ada di file backup-nya
+>    (file backup versi lama tanpa data ini tetap bisa diimport seperti biasa).
+> 3. **Peringatan privasi pada file backup.** Tab Setting sekarang menampilkan
+>    peringatan eksplisit bahwa file backup berisi data pribadi lengkap
+>    keluarga dan tidak boleh dibagikan sembarangan (mis. ke grup WhatsApp).
+> 4. **Pencarian di tab Pohon Keluarga (admin).** Sebelumnya kotak pencarian
+>    nama hanya ada di tampilan publik -- admin harus scroll manual di pohon
+>    yang sudah berisi banyak orang. Sekarang tab Pohon Keluarga (admin) juga
+>    punya kotak pencarian yang menyorot & scroll otomatis ke kecocokan.
+> 5. **Validasi ukuran foto setelah kompresi.** Firestore membatasi 1 dokumen
+>    maksimal ~1MB. Kalau (jarang terjadi) hasil kompresi otomatis foto masih
+>    terlalu besar, sistem sekarang memberi pesan yang jelas dan tetap
+>    menyimpan biodata lainnya (hanya fotonya yang perlu diunggah ulang),
+>    bukan gagal total dengan error Firestore mentah.
+> 6. **Bersih-bersih kode (tidak mengubah perilaku):** fungsi `escapeHtml()`
+>    yang sebelumnya terduplikasi persis sama di 2 file (`tree.js` & `admin.js`)
+>    sekarang disatukan di `db.js` supaya tidak ada risiko salah satu salinan
+>    diedit tanpa yang lain ikut berubah.
+
 Aplikasi pohon keluarga (PWA). Bisa dibuka di browser dan diinstal ke Android.
 Semua layanan yang dipakai **gratis**: Firebase (database) + Vercel (hosting).
 

@@ -34,16 +34,41 @@ async function setupAuthForm() {
   const title = document.getElementById('auth-title');
   const subtitle = document.getElementById('auth-subtitle');
   const submitBtn = document.getElementById('auth-submit');
+  const forgotBtn = document.getElementById('auth-forgot-btn');
 
   if (isRegistered) {
     title.textContent = 'Masuk Admin';
     subtitle.textContent = 'Masuk untuk mengelola data silsilah keluarga.';
     submitBtn.textContent = 'Masuk';
+    // v14: link "Lupa kata sandi?" -- sebelumnya satu-satunya cara reset
+    // password admin adalah lewat Firebase Console secara manual (perlu paham
+    // Firebase), yang jadi titik gagal serius untuk pengguna awam. Firebase
+    // Auth sudah punya fitur reset via email bawaan, tinggal dipanggil.
+    forgotBtn.style.display = 'block';
   } else {
     title.textContent = 'Daftar sebagai Admin';
     subtitle.textContent = 'Belum ada admin terdaftar. Daftar sekali di sini — setelah ini, tidak bisa ada admin lain.';
     submitBtn.textContent = 'Daftar & Masuk';
+    forgotBtn.style.display = 'none';
   }
+
+  forgotBtn.onclick = async () => {
+    const errorEl = document.getElementById('auth-error');
+    const infoEl = document.getElementById('auth-info');
+    errorEl.textContent = '';
+    infoEl.textContent = '';
+    const email = document.getElementById('auth-email').value.trim();
+    if (!email) {
+      errorEl.textContent = 'Isi dulu kolom Email di atas, lalu klik "Lupa kata sandi?" lagi.';
+      return;
+    }
+    try {
+      await auth.sendPasswordResetEmail(email);
+      infoEl.textContent = `Link reset kata sandi sudah dikirim ke ${email}. Cek juga folder Spam/Promosi kalau tidak terlihat di kotak masuk.`;
+    } catch (err) {
+      errorEl.textContent = translateAuthError(err.code) || err.message;
+    }
+  };
 
   const form = document.getElementById('auth-form');
   form.onsubmit = async (e) => {
@@ -52,6 +77,7 @@ async function setupAuthForm() {
     const password = document.getElementById('auth-password').value;
     const errorEl = document.getElementById('auth-error');
     errorEl.textContent = '';
+    document.getElementById('auth-info').textContent = '';
 
     try {
       if (isRegistered) {
@@ -88,7 +114,8 @@ function translateAuthError(code) {
     'auth/invalid-email': 'Format email tidak valid.',
     'auth/email-already-in-use': 'Email sudah terdaftar.',
     'auth/weak-password': 'Kata sandi minimal 6 karakter.',
-    'auth/invalid-credential': 'Email atau kata sandi salah.'
+    'auth/invalid-credential': 'Email atau kata sandi salah.',
+    'auth/too-many-requests': 'Terlalu banyak percobaan. Coba lagi beberapa saat lagi.'
   };
   return map[code];
 }
@@ -103,25 +130,41 @@ async function bootAdmin() {
   setupLaporanTab();
   setupSettings();
   setupDownload();
+  setupAdminTreeSearch();
   await refreshAll();
   await refreshCommentBadge();
   await refreshTrashBadge();
   await renderAdminDashboard();
 }
 
+// v15: supaya tab "Pohon Keluarga" admin juga default ciutkan & fokus ke
+// leluhur utama (spt tampilan publik) TAPI cuma sekali saja per sesi login --
+// kalau dipaksa ciutkan ulang tiap refreshAll() (dipanggil stlh hampir setiap
+// aksi CRUD admin), cabang yang sedang admin buka utk kerja akan terus
+// tertutup lagi tiap habis menyimpan sesuatu, yang justru mengganggu.
+let adminTreeFocusApplied = false;
+
 async function refreshAll() {
   [allPeople, allMarriages] = await Promise.all([PeopleAPI.getAll(), MarriageAPI.getAll()]);
   renderPeopleTable();
-  renderTreeSVG(document.getElementById('admin-tree-container'), allPeople, allMarriages, openEditPerson);
+  const adminTreeContainer = document.getElementById('admin-tree-container');
+  // Admin menampilkan SEMUA keluarga sekaligus (tdk difilter spt publik) --
+  // rootIds dikirim supaya keluarga lain yg tdk berkerabat dgn pasangan
+  // utama tersembunyi default & tidak merusak bentuk piramida (lihat
+  // computeAlienRootIds di tree.js).
+  const adminRootIds = RelationRules.findDefaultTreeRootIds(allPeople, allMarriages, cachedAppSettings.rootPersonId);
+  renderTreeSVG(adminTreeContainer, allPeople, allMarriages, openEditPerson, adminRootIds);
+  if (!adminTreeFocusApplied) {
+    adminTreeFocusApplied = true;
+    TreeControls.collapseAll(adminTreeContainer);
+    TreeControls.focusOn(adminTreeContainer, RelationRules.findDefaultTreeFocusId(allPeople, allMarriages, cachedAppSettings.rootPersonId));
+  }
   if (laporanSelectedId) renderLaporanDetail();
   refreshRootPersonSelectOptions();
 }
 
-function escapeHtml(str) {
-  return (str || '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  })[c]);
-}
+// escapeHtml() sekarang didefinisikan sekali saja di db.js (v14) -- db.js selalu
+// dimuat lebih dulu dari file ini (lihat urutan <script> di admin.html).
 
 function formatDate(d) {
   if (!d) return '-';
@@ -417,6 +460,10 @@ function closePersonForm() {
 }
 
 const MAX_FOTO_SOURCE_MB = 15; // batas ukuran file ASLI sebelum dikompres (bukan hasil kompresi)
+// v14: batas ukuran HASIL kompresi (base64) yang akan disimpan ke field fotoUrl.
+// Firestore membatasi 1 dokumen ~1MB total; 700KB di sini menyisakan margin
+// aman utk field biodata lain (nama, alamat, catatan, dll) di dokumen yang sama.
+const MAX_FOTO_BASE64_BYTES = 700 * 1024;
 
 function handleFotoPreview(e) {
   const file = e.target.files[0];
@@ -492,7 +539,19 @@ async function savePerson(e) {
 
     if (pendingFotoFile) {
       const base64 = await compressImageToBase64(pendingFotoFile);
-      await PeopleAPI.update(personId, { fotoUrl: base64 });
+      // v14: Firestore membatasi 1 dokumen maksimal ~1MB (semua field
+      // digabung). Foto sudah dikompres ke maxDim 300px, biasanya jauh di
+      // bawah batas ini -- tapi utk jaga-jaga (foto sangat ramai detail/
+      // noise yang susah dikompres), dicek dulu sebelum disimpan supaya
+      // pengguna dapat pesan yang jelas, bukan error Firestore mentah.
+      const approxBytes = Math.ceil(base64.length * 3 / 4);
+      if (approxBytes > MAX_FOTO_BASE64_BYTES) {
+        alert('Foto masih terlalu besar setelah dikompres otomatis (kemungkinan gambar sangat detail/ramai). ' +
+          'Coba pilih foto lain, atau potong (crop) dulu jadi lebih sederhana/fokus ke wajah sebelum diunggah.\n\n' +
+          'Data biodata lainnya sudah tersimpan; foto saja yang belum -- silakan Edit lagi untuk menambahkan foto.');
+      } else {
+        await PeopleAPI.update(personId, { fotoUrl: base64 });
+      }
     }
 
     closePersonForm();
@@ -778,7 +837,8 @@ function renderAnakSection(person) {
 async function refreshRelasiData() {
   [allPeople, allMarriages] = await Promise.all([PeopleAPI.getAll(), MarriageAPI.getAll()]);
   renderPeopleTable();
-  renderTreeSVG(document.getElementById('admin-tree-container'), allPeople, allMarriages, openEditPerson);
+  const relasiRootIds = RelationRules.findDefaultTreeRootIds(allPeople, allMarriages, cachedAppSettings.rootPersonId);
+  renderTreeSVG(document.getElementById('admin-tree-container'), allPeople, allMarriages, openEditPerson, relasiRootIds);
   if (relasiSelectedId) renderRelasiDetail();
   if (laporanSelectedId) renderLaporanDetail();
 }
@@ -1062,10 +1122,15 @@ function setupSettings() {
   });
 
   document.getElementById('btn-export').addEventListener('click', async () => {
-    const [people, marriages, comments] = await Promise.all([
-      PeopleAPI.getAll(), MarriageAPI.getAll(), CommentAPI.getAll()
+    // v14: sekarang ikut menyertakan settings/app (judul aplikasi & rootPersonId
+    // "Keluarga Utama") -- sebelumnya backup TIDAK menyimpan ini, jadi kalau
+    // suatu saat perlu restore ke project Firebase baru, pengaturan ini hilang
+    // dan harus diset ulang manual. settings/admin (UID admin) SENGAJA tidak
+    // diekspor -- itu bukan data keluarga & tidak relevan dipulihkan mentah.
+    const [people, marriages, comments, settings] = await Promise.all([
+      PeopleAPI.getAll(), MarriageAPI.getAll(), CommentAPI.getAll(), SettingsAPI.getAppSettings()
     ]);
-    const blob = new Blob([JSON.stringify({ people, marriages, comments }, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ people, marriages, comments, settings }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -1109,8 +1174,11 @@ async function handleImportFile(e) {
   const people = Array.isArray(parsed.people) ? parsed.people : [];
   const marriages = Array.isArray(parsed.marriages) ? parsed.marriages : [];
   const comments = Array.isArray(parsed.comments) ? parsed.comments : [];
+  // v14: file backup lama (sebelum v14) tidak punya field ini sama sekali --
+  // tetap aman, cukup dilewati (tidak ada apa pun yang direstore utk settings).
+  const settings = (parsed.settings && typeof parsed.settings === 'object') ? parsed.settings : null;
 
-  if (people.length === 0 && marriages.length === 0 && comments.length === 0) {
+  if (people.length === 0 && marriages.length === 0 && comments.length === 0 && !settings) {
     showSettingFeedback('File backup ini tidak berisi data yang bisa dipulihkan.', true);
     return;
   }
@@ -1120,11 +1188,14 @@ async function handleImportFile(e) {
     ? `\n\n⚠️ ${genderBermasalah} dari data orang di file ini punya jenis kelamin kosong/tidak baku -- ` +
       `mereka tidak akan terdeteksi sebagai ayah/ibu sampai diperbaiki manual lewat Edit setelah restore.`
     : '';
+  const catatanSettings = settings
+    ? `\n\nFile ini juga berisi pengaturan aplikasi (judul: "${settings.judulAplikasi || '-'}") yang akan ikut ditimpa.`
+    : '';
 
   const ok = confirm(
     `File ini berisi ${people.length} data orang, ${marriages.length} data pernikahan, dan ${comments.length} komentar.\n\n` +
     `Data dengan ID yang sama di database akan DITIMPA, data baru akan ditambahkan. Ini tidak bisa dibatalkan.` +
-    catatanGender +
+    catatanGender + catatanSettings +
     `\n\nLanjutkan restore sekarang?`
   );
   if (!ok) return;
@@ -1134,9 +1205,15 @@ async function handleImportFile(e) {
     if (people.length) await PeopleAPI.importAll(people);
     if (marriages.length) await MarriageAPI.importAll(marriages);
     if (comments.length) await CommentAPI.importAll(comments);
+    if (settings) await SettingsAPI.updateAppSettings(settings);
     await refreshAll();
     await refreshCommentBadge();
-    showSettingFeedback(`Berhasil memulihkan ${people.length} data orang, ${marriages.length} pernikahan, dan ${comments.length} komentar.`);
+    if (settings) {
+      cachedAppSettings = { ...cachedAppSettings, ...settings };
+      document.getElementById('setting-title').value = cachedAppSettings.judulAplikasi || 'Silsilah Keluarga';
+      refreshRootPersonSelectOptions();
+    }
+    showSettingFeedback(`Berhasil memulihkan ${people.length} data orang, ${marriages.length} pernikahan, ${comments.length} komentar${settings ? ', dan pengaturan aplikasi' : ''}.`);
   } catch (err) {
     showSettingFeedback('Gagal memulihkan data: ' + err.message, true);
   }
@@ -1151,6 +1228,32 @@ function showSettingFeedback(msg, isError = false) {
 // ======================================================================
 // DOWNLOAD JPG / PDF
 // ======================================================================
+
+// v14: pencarian nama khusus tab Pohon Keluarga (admin) -- meniru perilaku
+// pencarian yang sudah ada di tampilan publik (lihat setupSearch() di app.js):
+// menyorot kotak yang cocok & auto-scroll ke kecocokan pertama. Sebelumnya
+// admin harus scroll manual utk menemukan 1 orang di pohon yang sudah berisi
+// ratusan kotak.
+function setupAdminTreeSearch() {
+  const input = document.getElementById('admin-tree-search');
+  if (!input) return;
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    document.querySelectorAll('#admin-tree-container .tree-node').forEach(node => {
+      const id = node.dataset.id;
+      const person = allPeople.find(p => p.id === id);
+      const match = q && person && person.nama.toLowerCase().includes(q);
+      node.classList.toggle('highlight', !!match);
+    });
+    if (q) {
+      const found = allPeople.find(p => p.nama.toLowerCase().includes(q));
+      if (found) {
+        const el = document.querySelector(`#admin-tree-container .tree-node[data-id="${found.id}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      }
+    }
+  });
+}
 
 function setupDownload() {
   document.getElementById('btn-tree-expand-all').addEventListener('click', () => {
