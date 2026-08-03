@@ -16,6 +16,13 @@
   --danger: #D6756B;
   --radius: 12px;
   --shadow: 0 2px 10px rgba(79, 124, 172, 0.08);
+  /* Diisi otomatis oleh JS (updateLayoutOffsets() di app.js) sesuai tinggi
+     asli topbar & toolbar pencarian pohon saat itu -- topbar bisa jadi 2-3
+     baris di layar HP sempit, jadi tidak aman pakai angka tetap (mis. 62px)
+     utk menghitung sisa tinggi layar. Nilai default di sini cuma fallback
+     sebelum JS sempat jalan / kalau JS gagal. */
+  --topbar-h: 62px;
+  --tree-toolbar-h: 0px;
 }
 
 * { box-sizing: border-box; }
@@ -67,6 +74,7 @@ body {
   z-index: 150;
 }
 .view-chooser-card {
+  position: relative;
   background: var(--surface);
   border-radius: var(--radius);
   padding: 32px 28px;
@@ -75,7 +83,47 @@ body {
   text-align: center;
   box-shadow: 0 8px 30px rgba(0,0,0,0.12);
 }
-.view-chooser-card h2 { margin: 0 0 6px; font-size: 20px; }
+.view-chooser-card h2 { margin: 0 0 6px; font-size: 20px; padding-right: 26px; }
+
+/* Tombol close bundar kecil: supaya tamu yg tidak mau langsung pilih
+   Pohon/Jelajah bisa menutup layar ini dan memakai menu topbar (Cari Data,
+   Dashboard, Admin) yang sebelumnya tertutup penuh oleh overlay ini. */
+.chooser-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.chooser-close-btn:hover { background: var(--blue-pale); color: var(--blue-deep); }
+
+/* Ditampilkan di <main> saat tamu menutup layar pilihan awal lewat tombol
+   close di atas, tanpa memilih Pohon/Jelajah -- supaya area di bawah topbar
+   tidak kosong melompong dan tamu tetap diarahkan ke menu yang tersedia. */
+.landing-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  height: calc(100vh - var(--topbar-h));
+  text-align: center;
+  color: var(--text-muted);
+  padding: 20px;
+}
+.landing-hint p { margin: 0; font-size: 15px; max-width: 360px; }
 .view-chooser-options {
   display: flex;
   gap: 16px;
@@ -130,7 +178,7 @@ body {
 .btn-tree-float { box-shadow: var(--shadow); }
 .tree-wrapper {
   width: 100%;
-  height: calc(100vh - 62px);
+  height: calc(100vh - var(--topbar-h));
   overflow: auto;
   cursor: grab;
   text-align: center; /* menengahkan .tree-container (inline-block) secara
@@ -218,7 +266,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: calc(100vh - 62px);
+  height: calc(100vh - var(--topbar-h));
   color: var(--text-muted);
   text-align: center;
 }
@@ -749,4 +797,18 @@ h2, h3 { color: var(--text-main); }
   .tree-toolbar-float { left: 8px; right: 8px; top: 8px; }
   .search-box-float { width: 100%; min-width: 0; }
   .btn-tree-float { flex: 1 1 auto; padding: 9px 10px; font-size: 13px; }
+
+  /* Di layar HP, kotak cari + 2 tombol di .tree-toolbar-float melebar jadi
+     beberapa baris (search box sendiri, tombol Perluas/Ciutkan di baris lain)
+     sehingga tingginya jauh lebih besar dari versi desktop. Karena toolbar
+     ini position:absolute mengambang DI ATAS kanvas pohon, tinggi ekstra itu
+     dulu ikut menutupi node-node pohon paling atas. Di sini kita beri jarak
+     kosong (padding-top) di atas kanvas pohon sebesar tinggi toolbar yang
+     sebenarnya (--tree-toolbar-h, diukur & diisi otomatis oleh JS di
+     app.js/admin.js -- lihat updateLayoutOffsets()), supaya toolbar tetap
+     mengambang tapi node pohon mulai digambar DI BAWAH toolbar, tidak lagi
+     tertimpa. Wrapper tetap bisa discroll seperti biasa untuk menjangkau
+     kanvas yang "turun" ini.  */
+  .tree-wrapper { padding-top: var(--tree-toolbar-h); }
+  .empty-state { padding-top: var(--tree-toolbar-h); }
 }

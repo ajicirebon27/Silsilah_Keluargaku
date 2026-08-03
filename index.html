@@ -25,6 +25,7 @@
      layar). Tampil pertama kali halaman dibuka, sebelum data pohon terlihat. -->
 <div id="view-chooser" class="view-chooser-overlay">
   <div class="view-chooser-card">
+    <button id="chooser-close" class="chooser-close-btn" title="Tutup, lihat menu Cari Data / Dashboard di atas" aria-label="Tutup">&times;</button>
     <h2>Pilih Tampilan Silsilah Keluarga</h2>
     <p class="comment-hint">Pilih cara kamu ingin menjelajahi silsilah keluarga ini.</p>
     <div class="view-chooser-options">
@@ -43,6 +44,11 @@
 </div>
 
 <main>
+  <div id="landing-hint" class="landing-hint" style="display:none">
+    <p>Gunakan menu di atas untuk <strong>🔍 Cari Data</strong> atau <strong>Dashboard</strong>.</p>
+    <button id="landing-show-chooser" class="btn-secondary">🌳 Lihat Pohon / Jelajah Keluarga</button>
+  </div>
+
   <div id="tree-view-section" class="tree-view-section" style="display:none">
     <div class="tree-toolbar-float">
       <input type="text" id="tree-search" placeholder="Cari nama di pohon..." class="search-box-float">

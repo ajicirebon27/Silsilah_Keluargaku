@@ -26,6 +26,43 @@ async function init() {
   setupDashboardModal();
   setupJelajahModal();
   setupViewChooser();
+
+  updateLayoutOffsets();
+  window.addEventListener('resize', debouncedUpdateLayoutOffsets);
+  window.addEventListener('orientationchange', debouncedUpdateLayoutOffsets);
+}
+
+// ---------- Ukur tinggi asli topbar & toolbar pencarian pohon ----------
+// Dipakai oleh CSS (var(--topbar-h), var(--tree-toolbar-h)) supaya tinggi
+// area pohon/empty-state & jarak aman di bawah toolbar selalu pas dengan
+// tinggi topbar/toolbar yang SEBENARNYA -- bukan angka tetap. Ini penting
+// terutama di HP: topbar bisa melebar jadi 2 baris (judul + tombol-tombol),
+// dan toolbar pencarian pohon (kotak cari + tombol Perluas/Ciutkan) bisa
+// melebar jadi beberapa baris juga -- kalau dipatok angka tetap, di layar
+// sempit toolbar akan menutupi bagian atas pohon (lihat CSS media query
+// max-width:640px). Dipanggil saat halaman dimuat & saat ukuran layar
+// berubah (resize/putar HP).
+function updateLayoutOffsets() {
+  const root = document.documentElement;
+  const topbar = document.querySelector('.topbar');
+  if (topbar) root.style.setProperty('--topbar-h', topbar.offsetHeight + 'px');
+
+  // Toolbar pencarian pohon hanya punya ukuran nyata (offsetHeight > 0)
+  // ketika tree-view-section sedang terlihat (bukan display:none) -- kalau
+  // section-nya masih tersembunyi (mis. layar pilihan awal belum dipilih),
+  // biarkan nilai sebelumnya / fallback 0px dari CSS, nanti diukur ulang
+  // begitu tampilan Pohon dipilih (lihat setupViewChooser()).
+  const toolbar = document.querySelector('.tree-toolbar-float');
+  const treeSection = document.getElementById('tree-view-section');
+  if (toolbar && treeSection && treeSection.style.display !== 'none') {
+    root.style.setProperty('--tree-toolbar-h', (toolbar.offsetHeight + 14) + 'px');
+  }
+}
+
+let _layoutOffsetsTimer = null;
+function debouncedUpdateLayoutOffsets() {
+  clearTimeout(_layoutOffsetsTimer);
+  _layoutOffsetsTimer = setTimeout(updateLayoutOffsets, 150);
 }
 
 async function loadData() {
@@ -172,10 +209,12 @@ let jelajahOpenedFromChooser = false;
 function setupViewChooser() {
   const chooser = document.getElementById('view-chooser');
   const treeSection = document.getElementById('tree-view-section');
+  const landingHint = document.getElementById('landing-hint');
   if (!chooser || !treeSection) return;
 
   document.getElementById('choose-tree').addEventListener('click', () => {
     chooser.style.display = 'none';
+    if (landingHint) landingHint.style.display = 'none';
     treeSection.style.display = '';
     // Saat loadData() memanggil TreeControls.focusOn() tadi, tree-view-section
     // masih display:none sehingga scrollIntoView tidak berpengaruh apa-apa
@@ -183,21 +222,46 @@ function setupViewChooser() {
     // section-nya benar-benar terlihat, supaya leluhur utama tetap langsung
     // ke tengah layar begitu tampilan Pohon dipilih.
     requestAnimationFrame(() => {
+      updateLayoutOffsets(); // toolbar baru punya ukuran nyata setelah section ini terlihat
       TreeControls.focusOn(treeContainer, RelationRules.findDefaultTreeFocusId(allPeople, allMarriages, appSettings.rootPersonId));
     });
   });
 
   document.getElementById('choose-jelajah').addEventListener('click', () => {
     chooser.style.display = 'none';
+    if (landingHint) landingHint.style.display = 'none';
     jelajahOpenedFromChooser = true;
     openJelajahModal();
   });
+
+  // Tombol close bundar kecil di pojok kartu pilihan: tamu yang tidak mau
+  // langsung pilih Pohon/Jelajah bisa menutup layar ini saja, supaya topbar
+  // (Cari Data, Dashboard, Admin) -- yang tadinya tertutup penuh oleh overlay
+  // pilihan ini -- jadi bisa dipakai langsung.
+  const chooserClose = document.getElementById('chooser-close');
+  if (chooserClose) {
+    chooserClose.addEventListener('click', () => {
+      chooser.style.display = 'none';
+      if (landingHint) landingHint.style.display = 'flex';
+    });
+  }
+
+  // Dari layar landing-hint, tamu masih bisa kembali membuka layar pilihan
+  // Pohon/Jelajah kalau berubah pikiran.
+  const landingShowChooser = document.getElementById('landing-show-chooser');
+  if (landingShowChooser) {
+    landingShowChooser.addEventListener('click', () => {
+      if (landingHint) landingHint.style.display = 'none';
+      chooser.style.display = 'flex';
+    });
+  }
 
   const btnSwitch = document.getElementById('btn-switch-view');
   if (btnSwitch) {
     btnSwitch.addEventListener('click', () => {
       document.getElementById('jelajah-modal').style.display = 'none';
       jelajahOpenedFromChooser = false;
+      if (landingHint) landingHint.style.display = 'none';
       treeSection.style.display = 'none';
       chooser.style.display = 'flex';
     });
