@@ -25,6 +25,7 @@ async function init() {
   setupLaporanModal();
   setupDashboardModal();
   setupJelajahModal();
+  setupSubKeluargaReset();
   setupViewChooser();
 
   updateLayoutOffsets();
@@ -160,14 +161,30 @@ function setZoom(scale) {
 }
 
 // ---------- Search ----------
-// Sama persis dengan setupAdminTreeSearch() di admin.js: hasil pencarian
-// discope ke #tree-container saja (dulu ke seluruh dokumen, tapi ini lebih
-// konsisten & aman kalau nanti ada elemen .tree-node lain di luar pohon).
+// Kotak pencarian pohon punya 2 MODE, dipilih lewat filter <select>
+// #tree-search-mode di sebelahnya:
+//   - "all" (Seluruh Pohon): perilaku lama -- highlight semua kotak yang
+//     namanya cocok di pohon yang SEDANG tampil, lalu scroll ke hasil
+//     pertama (mis. sama persis dengan setupAdminTreeSearch() di admin.js).
+//   - "sub" (Sub Keluarga): mengetik menampilkan daftar saran nama (mirip
+//     modal Cari Sub Keluarga versi sebelumnya, cuma sekarang inline di
+//     bawah kotak cari, tidak perlu buka modal terpisah). Klik salah satu
+//     saran akan MEMPERSEMPIT pohon lewat TreeControls.buildSubFamily()
+//     -- hanya pasangan orang itu, anak, menantu, dan cucunya saja (lihat
+//     applySubFamily() di bawah).
 function setupSearch() {
   const input = document.getElementById('tree-search');
+  const modeSelect = document.getElementById('tree-search-mode');
+  const suggestBox = document.getElementById('tree-search-suggest');
   if (!input) return;
-  input.addEventListener('input', () => {
-    const q = input.value.trim().toLowerCase();
+
+  function closeSuggest() {
+    if (!suggestBox) return;
+    suggestBox.style.display = 'none';
+    suggestBox.innerHTML = '';
+  }
+
+  function highlightWholeTree(q) {
     document.querySelectorAll('#tree-container .tree-node').forEach(node => {
       const id = node.dataset.id;
       const person = allPeople.find(p => p.id === id);
@@ -192,7 +209,66 @@ function setupSearch() {
         }
       }
     }
+  }
+
+  function showSubFamilySuggest(q) {
+    if (!suggestBox) return;
+    if (!q) { closeSuggest(); return; }
+    const matches = allPeople.filter(p => p.nama.toLowerCase().includes(q)).slice(0, 8);
+    suggestBox.innerHTML = matches.length
+      ? matches.map(p => `
+          <div class="tree-search-suggest-item" data-id="${p.id}">
+            ${escapeHtml(p.nama)} <span class="tree-search-suggest-sub">(${escapeHtml(p.jenisKelamin || '-')})</span>
+          </div>
+        `).join('')
+      : '<div class="tree-search-suggest-empty">Tidak ditemukan.</div>';
+    suggestBox.style.display = 'block';
+    suggestBox.querySelectorAll('.tree-search-suggest-item').forEach(item => {
+      // mousedown (bukan click) supaya sempat terpicu SEBELUM event blur
+      // pada input menutup dropdown ini duluan.
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        applySubFamily(item.dataset.id);
+        input.value = '';
+        closeSuggest();
+      });
+    });
+  }
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    const mode = modeSelect ? modeSelect.value : 'all';
+    if (mode === 'sub') {
+      showSubFamilySuggest(q);
+    } else {
+      closeSuggest();
+      highlightWholeTree(q);
+    }
   });
+
+  input.addEventListener('blur', () => {
+    // Ditunda sebentar supaya klik pada item saran (lihat mousedown di atas)
+    // sempat terproses sebelum dropdown-nya ditutup oleh blur ini.
+    setTimeout(closeSuggest, 150);
+  });
+
+  if (modeSelect) {
+    modeSelect.addEventListener('change', () => {
+      closeSuggest();
+      input.value = '';
+      if (modeSelect.value === 'all') {
+        // Pindah dari mode Sub Keluarga -> Seluruh Pohon: kalau sebelumnya
+        // sudah ada sub keluarga yg diterapkan, kembalikan dulu ke pohon
+        // lengkap supaya konsisten dgn label filter yg sekarang dipilih.
+        if (subFamilyPersonId) resetSubFamily(); else highlightWholeTree('');
+      } else {
+        // Pindah ke mode Sub Keluarga: bersihkan highlight pencarian
+        // "Seluruh Pohon" sebelumnya supaya tidak nyangkut di kotak lama.
+        highlightWholeTree('');
+      }
+      input.focus();
+    });
+  }
 }
 
 // ---------- Pilihan tampilan awal (Pohon vs Jelajah/Kartu) ----------
@@ -216,6 +292,11 @@ function setupViewChooser() {
     chooser.style.display = 'none';
     if (landingHint) landingHint.style.display = 'none';
     treeSection.style.display = '';
+    subFamilyPersonId = null;
+    document.getElementById('subkeluarga-active-label').style.display = 'none';
+    document.getElementById('btn-subkeluarga-reset').style.display = 'none';
+    const modeSelectTree = document.getElementById('tree-search-mode');
+    if (modeSelectTree) modeSelectTree.value = 'all';
     // Saat loadData() memanggil TreeControls.focusOn() tadi, tree-view-section
     // masih display:none sehingga scrollIntoView tidak berpengaruh apa-apa
     // (elemen belum punya ukuran/posisi). Panggil ulang sekarang setelah
@@ -263,6 +344,11 @@ function setupViewChooser() {
       jelajahOpenedFromChooser = false;
       if (landingHint) landingHint.style.display = 'none';
       treeSection.style.display = 'none';
+      subFamilyPersonId = null;
+      document.getElementById('subkeluarga-active-label').style.display = 'none';
+      document.getElementById('btn-subkeluarga-reset').style.display = 'none';
+      const modeSelectSwitch = document.getElementById('tree-search-mode');
+      if (modeSelectSwitch) modeSelectSwitch.value = 'all';
       chooser.style.display = 'flex';
     });
   }
@@ -408,6 +494,69 @@ function selectLaporanPerson(id) {
   const lines = RelationRules.generateNarrative(id, allPeople, allMarriages);
   const listEl = document.getElementById('laporan-narrative-list');
   listEl.innerHTML = lines.map(l => `<li>${escapeHtml(l)}</li>`).join('') || '<li>Belum ada informasi relasi yang bisa ditampilkan.</li>';
+}
+
+// ---------- Sub Keluarga (pohon dipersempit: pasangan + anak + cucu saja) ----------
+// Berbeda dengan lencana ciut/lebar biasa (yang cuma menyembunyikan
+// SEMENTARA, datanya tetap "ada" di baliknya dan bisa dibuka kapan saja),
+// mode ini benar-benar MEMOTONG data sebelum digambar: pohon yang tampil
+// jadi cuma pasangan yang dicari + anak + menantu + cucunya saja, tidak
+// melebar ke leluhur di atasnya maupun ke buyut di bawah cucu. Cocok utk
+// keluarga besar yang datanya banyak, supaya tamu bisa langsung fokus ke
+// 1 keluarga inti tanpa harus meraba-raba klik lencana +/- satu-satu.
+let subFamilyPersonId = null;
+
+function setupSubKeluargaReset() {
+  const btn = document.getElementById('btn-subkeluarga-reset');
+  if (btn) btn.addEventListener('click', resetSubFamily);
+}
+
+function applySubFamily(personId) {
+  const person = allPeople.find(p => p.id === personId);
+  if (!person) return;
+
+  const { subPeople, subMarriages, rootIds } = TreeControls.buildSubFamily(allPeople, allMarriages, personId);
+
+  // Status ciut/lebar dari tampilan sebelumnya (pohon lengkap) dibuang dulu,
+  // supaya di mode sub keluarga ini semuanya tampil terbuka penuh (memang
+  // sudah sengaja dipersempit cuma sampai cucu, jadi tidak perlu diciutkan lagi).
+  TreeControls.resetCollapse(treeContainer);
+  renderTreeSVG(treeContainer, subPeople, subMarriages, openDetail, rootIds);
+
+  subFamilyPersonId = personId;
+  const label = document.getElementById('subkeluarga-active-label');
+  if (label) {
+    label.textContent = `👪 Sub keluarga: ${person.nama}`;
+    label.style.display = '';
+  }
+  document.getElementById('btn-subkeluarga-reset').style.display = '';
+
+  requestAnimationFrame(() => {
+    updateLayoutOffsets();
+    TreeControls.focusOn(treeContainer, rootIds[0] || personId);
+  });
+}
+
+function resetSubFamily() {
+  if (!subFamilyPersonId) return;
+  subFamilyPersonId = null;
+
+  TreeControls.resetCollapse(treeContainer);
+  const rootIds = RelationRules.findDefaultTreeRootIds(allPeople, allMarriages, appSettings.rootPersonId);
+  renderTreeSVG(treeContainer, allPeople, allMarriages, openDetail, rootIds);
+  TreeControls.collapseAll(treeContainer);
+
+  document.getElementById('subkeluarga-active-label').style.display = 'none';
+  document.getElementById('btn-subkeluarga-reset').style.display = 'none';
+  const modeSelect = document.getElementById('tree-search-mode');
+  if (modeSelect) modeSelect.value = 'all';
+  const searchInput = document.getElementById('tree-search');
+  if (searchInput) searchInput.value = '';
+
+  requestAnimationFrame(() => {
+    updateLayoutOffsets();
+    TreeControls.focusOn(treeContainer, RelationRules.findDefaultTreeFocusId(allPeople, allMarriages, appSettings.rootPersonId));
+  });
 }
 
 // ---------- Modal Dashboard (ringkasan statistik) ----------

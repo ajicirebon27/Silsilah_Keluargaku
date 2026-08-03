@@ -51,9 +51,18 @@
 
   <div id="tree-view-section" class="tree-view-section" style="display:none">
     <div class="tree-toolbar-float">
-      <input type="text" id="tree-search" placeholder="Cari nama di pohon..." class="search-box-float">
+      <div class="tree-search-wrap">
+        <input type="text" id="tree-search" placeholder="Cari nama di pohon..." class="search-box-float" autocomplete="off">
+        <div id="tree-search-suggest" class="tree-search-suggest" style="display:none"></div>
+      </div>
+      <select id="tree-search-mode" class="tree-search-mode" title="Pilih cakupan pencarian">
+        <option value="all">🌳 Seluruh Pohon</option>
+        <option value="sub">👪 Sub Keluarga (s.d. cucu)</option>
+      </select>
       <button id="tree-expand-all" class="btn-secondary btn-tree-float">Perluas Semua</button>
       <button id="tree-collapse-all" class="btn-secondary btn-tree-float">Ciutkan Semua</button>
+      <span id="subkeluarga-active-label" class="subkeluarga-active-label" style="display:none"></span>
+      <button id="btn-subkeluarga-reset" class="btn-secondary btn-tree-float" style="display:none">↩ Tampilkan Semua</button>
     </div>
 
     <div id="tree-wrapper" class="tree-wrapper">

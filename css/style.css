@@ -165,6 +165,11 @@ body {
   gap: 8px;
   flex-wrap: wrap;
 }
+.tree-search-wrap {
+  position: relative;
+  flex: 1 1 200px;
+  min-width: 0;
+}
 .search-box-float {
   padding: 9px 16px;
   border-radius: 20px;
@@ -172,10 +177,62 @@ body {
   outline: none;
   font-size: 14px;
   min-width: 200px;
+  width: 100%;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
+/* Dropdown saran nama utk mode "Sub Keluarga": mengambang tepat di bawah
+   kotak cari, TIDAK ikut menambah tinggi toolbar (position:absolute) --
+   supaya --tree-toolbar-h (dipakai CSS utk memberi jarak aman di atas
+   kanvas pohon, lihat updateLayoutOffsets() di app.js) tidak perlu
+   dihitung ulang tiap kali dropdown ini buka/tutup. */
+.tree-search-suggest {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 30;
+  padding: 4px;
+}
+.tree-search-suggest-item {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  cursor: pointer;
+  color: var(--text-main);
+}
+.tree-search-suggest-item:hover { background: var(--blue-pale); }
+.tree-search-suggest-sub { color: var(--text-muted); font-size: 12px; }
+.tree-search-suggest-empty { padding: 8px 12px; font-size: 13px; color: var(--text-muted); }
+
+.tree-search-mode {
+  padding: 9px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  outline: none;
+  font-size: 13px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text-main);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
 .btn-tree-float { box-shadow: var(--shadow); }
+.subkeluarga-active-label {
+  font-size: 12.5px;
+  color: var(--green-deep);
+  background: var(--green-pale);
+  padding: 7px 12px;
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+}
 .tree-wrapper {
   width: 100%;
   height: calc(100vh - var(--topbar-h));
@@ -192,6 +249,16 @@ body {
   background:
     radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0);
   background-size: 24px 24px;
+  /* PENTING: toolbar pencarian (.tree-toolbar-float) mengambang di ATAS
+     kanvas ini lewat position:absolute, jadi TANPA jarak kosong di sini ia
+     akan menimpa baris pertama kotak pohon (persis bug yang dilaporkan --
+     terjadi baik di browser desktop maupun HP, sebelumnya jarak ini cuma
+     ditambahkan lewat media query utk layar sempit sehingga desktop &
+     HP jadi tidak konsisten). --tree-toolbar-h diukur & diisi otomatis
+     oleh JS (updateLayoutOffsets() di app.js/admin.js) sesuai tinggi
+     TOOLBAR YANG SEBENARNYA saat itu, jadi berlaku benar di semua ukuran
+     layar, bukan cuma satu breakpoint. */
+  padding-top: var(--tree-toolbar-h);
 }
 .tree-wrapper.grabbing { cursor: grabbing; }
 .tree-container {
@@ -269,6 +336,7 @@ body {
   height: calc(100vh - var(--topbar-h));
   color: var(--text-muted);
   text-align: center;
+  padding-top: var(--tree-toolbar-h);
 }
 .empty-sub { font-size: 14px; }
 
@@ -795,20 +863,51 @@ h2, h3 { color: var(--text-main); }
   .dashboard-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
   .view-chooser-options { flex-direction: column; }
   .tree-toolbar-float { left: 8px; right: 8px; top: 8px; }
+  .tree-search-wrap { flex: 1 1 100%; }
   .search-box-float { width: 100%; min-width: 0; }
+  .tree-search-mode { flex: 1 1 auto; }
   .btn-tree-float { flex: 1 1 auto; padding: 9px 10px; font-size: 13px; }
+  .subkeluarga-active-label { width: 100%; text-align: center; }
 
-  /* Di layar HP, kotak cari + 2 tombol di .tree-toolbar-float melebar jadi
-     beberapa baris (search box sendiri, tombol Perluas/Ciutkan di baris lain)
-     sehingga tingginya jauh lebih besar dari versi desktop. Karena toolbar
-     ini position:absolute mengambang DI ATAS kanvas pohon, tinggi ekstra itu
-     dulu ikut menutupi node-node pohon paling atas. Di sini kita beri jarak
-     kosong (padding-top) di atas kanvas pohon sebesar tinggi toolbar yang
-     sebenarnya (--tree-toolbar-h, diukur & diisi otomatis oleh JS di
-     app.js/admin.js -- lihat updateLayoutOffsets()), supaya toolbar tetap
-     mengambang tapi node pohon mulai digambar DI BAWAH toolbar, tidak lagi
-     tertimpa. Wrapper tetap bisa discroll seperti biasa untuk menjangkau
-     kanvas yang "turun" ini.  */
-  .tree-wrapper { padding-top: var(--tree-toolbar-h); }
-  .empty-state { padding-top: var(--tree-toolbar-h); }
+  /* Bug klasik iOS Safari: input/select/textarea dgn font-size < 16px
+     memicu browser mem-ZOOM otomatis begitu diketuk/fokus (supaya teks
+     "terbaca"), dan karena viewport di sini dipatok maximum-scale=1,
+     tamu tidak bisa pinch keluar lagi -- tampilan jadi terasa "rusak"/
+     nyangkut zoom setelah mengetik di kotak cari. 16px adalah ambang
+     batas resminya, jadi disamakan semua di layar HP. */
+  input, select, textarea { font-size: 16px; }
+
+  /* Catatan: jarak aman (padding-top) di atas kanvas pohon supaya tidak
+     tertimpa toolbar mengambang sudah dipindah jadi aturan dasar
+     (.tree-wrapper / .empty-state di atas, TIDAK lagi di dalam media
+     query ini) -- supaya berlaku konsisten di semua ukuran layar, bukan
+     cuma HP. Toolbar di HP memang lebih tinggi (melebar jadi beberapa
+     baris), tapi --tree-toolbar-h sudah otomatis mengikuti tinggi
+     sebenarnya lewat updateLayoutOffsets(), jadi tidak perlu diatur ulang
+     di sini. */
+
+  /* Kotak cari di panel admin (mis. tab Data Orang) dipatok min-width:220px
+     di CSS desktop -- di layar HP sempit itu bisa memaksa .panel-header
+     melebar ke samping & memicu scroll horizontal pada seluruh halaman.
+     Di HP biarkan melebar penuh mengikuti container. */
+  .panel-header input { min-width: 0; width: 100%; }
+
+  /* modal-card dipatok padding 28px di semua ukuran layar -- di HP paling
+     sempit (~320-360px, mis. iPhone SE) itu menyisakan area konten yang
+     terlalu sempit dan bikin beberapa isi modal (tabel, kartu biodata)
+     terasa "kepepet"/rusak. Perkecil padding & jarak overlay di HP. */
+  .modal-overlay { padding: 10px; }
+  .modal-card { padding: 20px 16px; }
+}
+
+/* Fase tambahan utk HP yang lebih sempit lagi (mis. lebar < 380px) --
+   tombol topbar & toolbar pohon dipadatkan lebih jauh, dan tombol zoom
+   digeser sedikit ke dalam, supaya tidak ada elemen yang terpotong atau
+   tertindih di ujung layar. */
+@media (max-width: 380px) {
+  .admin-link { font-size: 12px; padding: 7px 8px; }
+  .btn-tree-float { font-size: 12px; padding: 8px 8px; }
+  .search-box-float { padding: 9px 12px; }
+  .zoom-controls { right: 10px; bottom: 10px; }
+  .zoom-controls button { width: 36px; height: 36px; font-size: 16px; }
 }

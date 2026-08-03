@@ -234,6 +234,58 @@ const TreeControls = {
     if (!personId) return;
     const el = container.querySelector(`.tree-node[data-id="${personId}"]`);
     if (el) el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
+  },
+
+  // Dipakai fitur "Cari Sub Keluarga": user cari 1 nama, lalu pohon yang
+  // digambar dipersempit HANYA jadi -- pasangan orang itu (semua
+  // pernikahannya, mendukung poligami), anak-anaknya, menantu (pasangan si
+  // anak, supaya garis pernikahan ke cucu bisa digambar), dan cucu-cucunya.
+  // TIDAK melebar ke leluhur (orang tua ke atas) maupun ke buyut/generasi
+  // sesudah cucu -- beda dgn mode collapse/expand biasa yg cuma
+  // menyembunyikan sementara tapi datanya tetap "ada" di baliknya, di sini
+  // datanya sendiri yg dipotong sebelum dikirim ke renderTreeSVG().
+  buildSubFamily(people, marriages, personId) {
+    // Lapis 0: orang yg dicari + seluruh pasangannya (bisa >1 kalau poligami).
+    const level0 = new Set([personId]);
+    const rootMarriages = marriages.filter(m => m.orangId1 === personId || m.orangId2 === personId);
+    rootMarriages.forEach(m => {
+      if (m.orangId1) level0.add(m.orangId1);
+      if (m.orangId2) level0.add(m.orangId2);
+    });
+
+    // Lapis 1: anak-anak dari SEMUA pernikahan di lapis 0.
+    const level1 = new Set();
+    rootMarriages.forEach(m => (m.childIds || []).forEach(cid => level1.add(cid)));
+
+    // Pernikahan tiap anak (utk garis pasangan ke arah cucu) + pasangannya (menantu).
+    const level1Marriages = marriages.filter(m => level1.has(m.orangId1) || level1.has(m.orangId2));
+    const level1Spouses = new Set();
+    level1Marriages.forEach(m => {
+      if (m.orangId1) level1Spouses.add(m.orangId1);
+      if (m.orangId2) level1Spouses.add(m.orangId2);
+    });
+
+    // Lapis 2: cucu -- anak dari pernikahan level1. Sengaja TIDAK ditelusuri
+    // lebih jauh (tidak ambil pasangan cucu / anak cucu) supaya batasnya
+    // benar-benar berhenti di cucu sesuai permintaan fitur ini.
+    const level2 = new Set();
+    level1Marriages.forEach(m => (m.childIds || []).forEach(cid => level2.add(cid)));
+
+    const idSet = new Set([...level0, ...level1, ...level1Spouses, ...level2]);
+
+    const subPeople = people.filter(p => idSet.has(p.id));
+    const subMarriages = marriages
+      .filter(m => idSet.has(m.orangId1) || idSet.has(m.orangId2))
+      .map(m => ({ ...m, childIds: (m.childIds || []).filter(cid => idSet.has(cid)) }));
+
+    return { subPeople, subMarriages, rootIds: [...level0] };
+  },
+
+  // Reset status ciut/lebar (dipakai saat pindah antara pohon lengkap <->
+  // sub keluarga, supaya id yg kebetulan sama-sama ada di 2 mode itu tidak
+  // "membawa" status ciut dari mode sebelumnya).
+  resetCollapse(container) {
+    getCollapsedSet(container).clear();
   }
 };
 
