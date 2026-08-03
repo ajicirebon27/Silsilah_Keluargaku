@@ -46,14 +46,6 @@ body {
 }
 .topbar-title { font-size: 18px; font-weight: 600; }
 .topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.search-box {
-  padding: 8px 14px;
-  border-radius: 20px;
-  border: none;
-  outline: none;
-  font-size: 14px;
-  min-width: 160px;
-}
 .admin-link {
   color: #fff;
   text-decoration: none;
@@ -66,12 +58,89 @@ body {
 }
 .admin-link:hover { background: rgba(255,255,255,0.3); }
 
+/* ---------- Layar pilihan tampilan awal (Pohon vs Jelajah/Kartu) ---------- */
+.view-chooser-overlay {
+  position: fixed; inset: 0;
+  background: linear-gradient(135deg, var(--blue-pale), var(--green-pale));
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  z-index: 150;
+}
+.view-chooser-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 32px 28px;
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+.view-chooser-card h2 { margin: 0 0 6px; font-size: 20px; }
+.view-chooser-options {
+  display: flex;
+  gap: 16px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+.view-choice-btn {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 16px;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+.view-choice-btn:hover {
+  border-color: var(--blue-deep);
+  background: var(--blue-pale);
+  transform: translateY(-2px);
+}
+.view-choice-icon { font-size: 30px; }
+.view-choice-label { font-size: 15px; font-weight: 700; color: var(--text-main); }
+.view-choice-desc { font-size: 12px; color: var(--text-muted); }
+
 /* ---------- Tree area ---------- */
+.tree-view-section { position: relative; }
+.tree-toolbar-float {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  right: 16px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.search-box-float {
+  padding: 9px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  outline: none;
+  font-size: 14px;
+  min-width: 200px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.btn-tree-float { box-shadow: var(--shadow); }
 .tree-wrapper {
   width: 100%;
   height: calc(100vh - 62px);
   overflow: auto;
   cursor: grab;
+  text-align: center; /* menengahkan .tree-container (inline-block) secara
+    horizontal saat isinya lebih sempit dari layar -- tanpa ini kotak pohon
+    (termasuk pasangan akar Bapak Darsa & Ibu Kesi) menempel di kiri-atas
+    walau posisi INTERNAL node2-nya sendiri sudah dihitung center oleh
+    tree.js. Tetap aman dipakai walau pohon melebar sampai perlu discroll:
+    text-align hanya menentukan titik AWAL peletakan elemen inline-block,
+    begitu isinya sudah lebih lebar dari wrapper ia otomatis overflow &
+    tetap bisa digeser scroll ke kedua sisi seperti biasa. */
   background:
     radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0);
   background-size: 24px 24px;
@@ -106,6 +175,24 @@ body {
 .node-sub { font-size: 11px; fill: var(--text-muted); }
 .tree-node:hover .node-rect { filter: brightness(0.97); }
 .tree-node.highlight .node-rect { stroke: #E0A93B; stroke-width: 3; }
+
+/* v16: efek glow berdenyut pada kotak hasil pencarian (yg dilompati via
+   scrollIntoView), supaya mata pengguna langsung tertuju ke situ walau
+   pohonnya berisi ratusan kotak. Dipasang/dilepas oleh setupSearch() di
+   app.js & setupAdminTreeSearch() di admin.js -- lihat file tsb.
+   filter:drop-shadow dipakai (bukan box-shadow) krn elemennya SVG <g>. */
+@keyframes tree-node-glow-pulse {
+  0%   { filter: drop-shadow(0 0 0 rgba(224, 169, 59, 0)); }
+  25%  { filter: drop-shadow(0 0 16px rgba(224, 169, 59, 0.95)) drop-shadow(0 0 4px rgba(224, 169, 59, 1)); }
+  50%  { filter: drop-shadow(0 0 4px rgba(224, 169, 59, 0.35)); }
+  75%  { filter: drop-shadow(0 0 16px rgba(224, 169, 59, 0.95)) drop-shadow(0 0 4px rgba(224, 169, 59, 1)); }
+  100% { filter: drop-shadow(0 0 8px rgba(224, 169, 59, 0.55)); }
+}
+.tree-node.search-focus {
+  animation: tree-node-glow-pulse 0.8s ease-in-out 2;
+  animation-fill-mode: forwards;
+}
+.tree-node.search-focus .node-rect { stroke: #E0A93B; stroke-width: 3; }
 
 .zoom-controls {
   position: fixed;
@@ -609,6 +696,31 @@ h2, h3 { color: var(--text-main); }
 .dashboard-card-value { font-size: 26px; font-weight: 700; color: var(--text-main); line-height: 1.1; }
 .dashboard-card-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
 
+/* Kartu dashboard yang bisa diklik utk lihat rincian nama */
+.dashboard-card-clickable { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+.dashboard-card-clickable:hover,
+.dashboard-card-clickable:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  outline: none;
+}
+
+/* Modal Detail Dashboard */
+#dashboard-detail-modal { z-index: 150; }
+.dashboard-detail-count { font-size: 13px; color: var(--text-muted); margin: -4px 0 12px; }
+.dashboard-detail-list { list-style: none; padding: 0; margin: 0; max-height: 50vh; overflow-y: auto; }
+.dashboard-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.dashboard-detail-row:last-child { border-bottom: none; }
+.dashboard-detail-nama { font-weight: 600; }
+.dashboard-detail-ket { font-size: 12px; color: var(--text-muted); text-align: right; white-space: nowrap; }
+
 .dashboard-recent-wrap { margin-top: 26px; }
 .dashboard-recent-wrap h3 { margin-bottom: 10px; }
 .dashboard-recent-row {
@@ -630,8 +742,11 @@ h2, h3 { color: var(--text-main); }
   .topbar { flex-direction: column; align-items: stretch; padding: 12px 14px; }
   .topbar-title { text-align: center; margin-bottom: 4px; }
   .topbar-actions { width: 100%; justify-content: center; }
-  .search-box { min-width: 0; flex: 1 1 100%; order: -1; margin-bottom: 6px; }
   .admin-link { flex: 1 1 auto; text-align: center; padding: 8px 10px; font-size: 13px; }
   .admin-main { padding: 14px; }
   .dashboard-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .view-chooser-options { flex-direction: column; }
+  .tree-toolbar-float { left: 8px; right: 8px; top: 8px; }
+  .search-box-float { width: 100%; min-width: 0; }
+  .btn-tree-float { flex: 1 1 auto; padding: 9px 10px; font-size: 13px; }
 }

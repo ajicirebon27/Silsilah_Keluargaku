@@ -628,18 +628,125 @@ const StatsAPI = {
       belumTerelasi,
       maxGenerasi
     };
+  },
+
+  // Rincian nama-nama di balik satu angka pada kartu Dashboard -- dipanggil
+  // saat kartu diklik (Tab Dashboard admin & Modal Dashboard publik).
+  // "key" HARUS cocok dengan field yang dipakai di computeBasicStats() di atas.
+  getDetail(key, people, marriages) {
+    const byId = new Map(people.map(p => [p.id, p]));
+    const sortNama = (arr) => arr.slice().sort((a, b) => (a.nama || '').localeCompare(b.nama || '', 'id'));
+    const asRows = (arr, ketFn) => sortNama(arr).map(p => ({ nama: p.nama, ket: ketFn ? ketFn(p) : (p.jenisKelamin || '-') }));
+
+    switch (key) {
+      case 'totalOrang':
+        return { title: 'Semua Orang', rows: asRows(people) };
+
+      case 'laki':
+        return { title: 'Laki-laki', rows: asRows(people.filter(p => p.jenisKelamin === 'Laki-laki'), () => '') };
+
+      case 'perempuan':
+        return { title: 'Perempuan', rows: asRows(people.filter(p => p.jenisKelamin === 'Perempuan'), () => '') };
+
+      case 'totalAnakTercatat': {
+        const childIdSet = new Set();
+        marriages.forEach(m => (m.childIds || []).forEach(cid => childIdSet.add(cid)));
+        return { title: 'Anak Tercatat', rows: asRows(people.filter(p => childIdSet.has(p.id))) };
+      }
+
+      case 'totalPoligami': {
+        const spouseCountByPerson = new Map();
+        marriages.forEach(m => {
+          [m.orangId1, m.orangId2].filter(Boolean).forEach(id => {
+            spouseCountByPerson.set(id, (spouseCountByPerson.get(id) || 0) + 1);
+          });
+        });
+        const orang = [...spouseCountByPerson.entries()]
+          .filter(([, c]) => c > 1)
+          .map(([id]) => byId.get(id))
+          .filter(Boolean);
+        return {
+          title: 'Memiliki Lebih dari 1 Pasangan',
+          rows: asRows(orang, p => `${spouseCountByPerson.get(p.id)} pasangan`)
+        };
+      }
+
+      case 'belumTerelasi': {
+        const relatedIds = new Set();
+        marriages.forEach(m => {
+          if (m.orangId1) relatedIds.add(m.orangId1);
+          if (m.orangId2) relatedIds.add(m.orangId2);
+          (m.childIds || []).forEach(cid => relatedIds.add(cid));
+        });
+        return { title: 'Belum Ada Relasi', rows: asRows(people.filter(p => !relatedIds.has(p.id))) };
+      }
+
+      case 'genderInvalid':
+        return {
+          title: 'Jenis Kelamin Bermasalah',
+          rows: asRows(
+            people.filter(p => !RelationRules.hasValidGender(p)),
+            p => p.jenisKelamin ? `"${p.jenisKelamin}"` : '(kosong)'
+          )
+        };
+
+      case 'tanpaFoto':
+        return { title: 'Belum Ada Foto', rows: asRows(people.filter(p => !p.fotoUrl), () => '') };
+
+      case 'tanpaTglLahir':
+        return { title: 'Belum Ada Tanggal Lahir', rows: asRows(people.filter(p => !p.tglLahir), () => '') };
+
+      case 'totalKeluarga': {
+        const rows = marriages.map(m => {
+          const a = m.orangId1 ? byId.get(m.orangId1) : null;
+          const b = m.orangId2 ? byId.get(m.orangId2) : null;
+          const namaA = a ? a.nama : '(tidak diketahui)';
+          const namaB = b ? b.nama : '(orang tua tunggal)';
+          return { nama: `${namaA} & ${namaB}`, ket: `${(m.childIds || []).length} anak` };
+        });
+        rows.sort((x, y) => x.nama.localeCompare(y.nama, 'id'));
+        return { title: 'Keluarga / Pasangan', rows };
+      }
+
+      case 'maxGenerasi': {
+        const rows = people.map(p => {
+          let g = null;
+          try { g = RelationRules.getGenerationInfo(p.id, people, marriages).generasi; } catch (e) { /* abaikan */ }
+          return { nama: p.nama, ket: g ? `Generasi ke-${g}` : 'Belum diketahui', gen: g || 0 };
+        });
+        rows.sort((a, b) => (b.gen - a.gen) || a.nama.localeCompare(b.nama, 'id'));
+        return { title: 'Generasi Setiap Orang', rows: rows.map(({ nama, ket }) => ({ nama, ket })) };
+      }
+
+      default:
+        return { title: '', rows: [] };
+    }
   }
 };
 
 // Kartu ringkasan statistik (dipakai Tab Dashboard admin & Modal Dashboard publik).
 const DashboardView = {
+  // Setiap kartu boleh diberi "key" (cocok dengan StatsAPI.getDetail) supaya
+  // bisa diklik untuk melihat daftar nama di baliknya. Kartu tanpa "key"
+  // (kalau ada suatu saat) tetap tampil biasa, tidak bisa diklik.
   buildCardsHTML(cards) {
     return `<div class="dashboard-grid">${cards.map(c => `
-      <div class="dashboard-card dashboard-card-${c.tone || 'blue'}">
+      <div class="dashboard-card dashboard-card-${c.tone || 'blue'}${c.key ? ' dashboard-card-clickable' : ''}"
+           ${c.key ? `data-key="${c.key}" role="button" tabindex="0"` : ''}>
         <div class="dashboard-card-icon">${c.icon || ''}</div>
         <div class="dashboard-card-value">${c.value}</div>
         <div class="dashboard-card-label">${c.label}</div>
       </div>`).join('')}</div>`;
+  },
+
+  // Daftar nama (+ keterangan) untuk modal detail saat kartu diklik.
+  buildDetailListHTML(rows) {
+    if (!rows || !rows.length) return '<p class="empty-row-sm">Tidak ada data.</p>';
+    return `<ul class="dashboard-detail-list">${rows.map(r => `
+      <li class="dashboard-detail-row">
+        <span class="dashboard-detail-nama">${escapeHtml(r.nama || '-')}</span>
+        ${r.ket ? `<span class="dashboard-detail-ket">${escapeHtml(r.ket)}</span>` : ''}
+      </li>`).join('')}</ul>`;
   }
 };
 

@@ -78,12 +78,6 @@ function collectDescendants(id, childrenByParent, visited) {
   });
 }
 
-// Hitung siapa saja yang harus disembunyikan (keturunan dari node yang
-// sedang di-collapse), siapa saja yang jadi "pemilik" lencana toggle
-// (utk tahu perlu lencana atau tidak), dan berapa banyak keturunan yang
-// tersembunyi di balik tiap node yang di-collapse (utk angka pada
-// lencana, mis. "+5").
-//
 // ATURAN PEMILIK LENCANA (v16): karena budaya poligami di keluarga ini
 // (1 suami bisa py >1 istri, tiap istri py jalur keturunan sendiri),
 // lencana +/- jalur keturunan HANYA ditaruh pada node ISTRI (ibu),
@@ -95,94 +89,95 @@ function collectDescendants(id, childrenByParent, visited) {
 // jalur anak dari pernikahan itu DIPINDAH ke node ayah sbg fallback --
 // supaya keturunannya tetap bisa dibuka lewat UI, tidak "terjebak"
 // tersembunyi selamanya krn tidak ada node istri sama sekali.
-function computeTreeVisibility(marriages, collapsedSet, extraHiddenIds) {
-  const childrenByParent = buildChildrenByParent(marriages);
-  const hidden = new Set();
-  const hiddenCountByCollapsedId = new Map();
-
-  collapsedSet.forEach(id => {
-    const visited = new Set();
-    collectDescendants(id, childrenByParent, visited);
-    visited.forEach(v => hidden.add(v));
-    hiddenCountByCollapsedId.set(id, visited.size);
-  });
-
-  // extraHiddenIds: disembunyikan LANGSUNG (node itu sendiri + seluruh
-  // keturunannya), TIDAK lewat mekanisme collapse di atas -- jadi node ini
-  // tidak masuk collapsedSet, tidak dapat lencana "+N", dan tidak tersimpan
-  // sbg status yg bisa di-toggle publik/admin. Dipakai utk "leluhur lain"
-  // (akar keluarga yg sama sekali tidak berkerabat dgn rootIds) yg memang
-  // HARUS selalu tersembunyi secara default -- lihat computeAlienRootIds().
-  (extraHiddenIds || new Set()).forEach(id => {
-    hidden.add(id);
-    const visited = new Set();
-    collectDescendants(id, childrenByParent, visited);
-    visited.forEach(v => hidden.add(v));
-  });
-
+function computeBadgeOwnerSet(marriages) {
   const badgeOwnerSet = new Set();
   marriages.forEach(m => {
     if (!(m.childIds || []).length) return;
     if (m.orangId2) badgeOwnerSet.add(m.orangId2);       // istri/ibu -> pemilik normal
     else if (m.orangId1) badgeOwnerSet.add(m.orangId1);  // fallback: ibu tidak diketahui
   });
-
-  return { hidden, badgeOwnerSet, hiddenCountByCollapsedId };
+  return badgeOwnerSet;
 }
 
-// =====================================================================
-// LELUHUR LAIN (KELUARGA TIDAK BERKERABAT) -- disembunyikan default
-// Tampilan admin menampilkan SEMUA orang & pernikahan sekaligus (beda dgn
-// tampilan publik yg sudah disaring per rootPersonId lewat FamilyGraph di
-// db.js). Kalau database berisi >1 keluarga besar yg sama sekali tidak
-// berkerabat (mis. keluarga besar admin lain yg datanya kebetulan ada di
-// database yg sama), tiap keluarga itu punya "akar" (leluhur tanpa orang
-// tua tercatat) sendiri-sendiri -- kalau semua akar ini ikut digambar,
-// hasilnya banyak "puncak" piramida berjajar, bukan 1 piramida yg rapi
-// berpusat pada rootIds (pasangan utama, mis. Bapak Darsa & Ibu Kesi).
-//
-// Fungsi ini menelusuri graf keluarga TAK BERARAH (relasi pasangan ATAUPUN
-// orang tua-anak, dua arah) dari rootIds utk menandai siapa saja yg SATU
-// kelompok/komponen dgn rootIds. Orang yg TIDAK tercatat py orang tua
-// (akar dari kelompoknya) TAPI berada di LUAR kelompok rootIds itulah yang
-// dianggap "akar keluarga lain" -- id-id inilah yg dikembalikan utk
-// disembunyikan lewat extraHiddenIds pada computeTreeVisibility() (yg akan
-// ikut menyembunyikan seluruh keturunan dari akar tsb secara otomatis).
-function computeAlienRootIds(people, marriages, rootIds) {
-  const alienRoots = new Set();
-  const validRootIds = (rootIds || []).filter(id => people.some(p => p.id === id));
-  if (!validRootIds.length) return alienRoots;
+// v17 -- REVISI: dulu tampilan awal menampilkan SEMUA "leluhur" (org tanpa
+// catatan orang tua) sekaligus berjajar (mis. Bapak Yusuf, Ibu Siwen, Ibu
+// Samina, Bapak Darsa, Ibu Kesi, Bapak Nursita, Sopiyah tampil bersamaan),
+// walau yang sebetulnya jadi fokus utama cuma Bapak Darsa & Ibu Kesi.
+// Sekarang diganti dgn BFS "keterjangkauan" murni dari rootIds (pasangan
+// utama) -- PERSIS konsep tab Jelajah: yang tampil di awal HANYA rootIds,
+// sisanya (pasangan lain yg tak berkerabat, mertua, ipar, keturunan, dst)
+// baru muncul satu-per-satu begitu jalur yg menghubungkannya ke rootIds
+// dibuka lewat lencana +/-. Dua jenis jalur yg ditelusuri BFS:
+//   1. pasangan <-> pasangan  : SELALU ikut terbawa (butuh 2 kotak utk garis
+//      pernikahan), TIDAK bergantung status collapse.
+//   2. orang tua -> anak      : hanya diteruskan kalau org tuanya SEDANG
+//      TIDAK diciutkan (collapsedSet) -- inilah yg dikendalikan lencana +/-.
+// Siapapun yg TIDAK terjangkau BFS ini (baik keturunan yg belum dibuka,
+// MAUPUN "leluhur lain"/keluarga yg sama sekali tidak berkerabat) otomatis
+// tersembunyi -- jadi computeAlienRootIds() versi lama sudah tidak
+// diperlukan lagi, fungsi ini menggantikannya sekaligus.
+function computeTreeVisibility(people, marriages, collapsedSet, rootIds) {
+  const childrenByParent = buildChildrenByParent(marriages);
 
-  const adj = new Map(); // personId -> Set<personId>
-  const link = (a, b) => {
-    if (!a || !b) return;
-    if (!adj.has(a)) adj.set(a, new Set());
-    if (!adj.has(b)) adj.set(b, new Set());
-    adj.get(a).add(b);
-    adj.get(b).add(a);
+  // Marriages yg diikuti tiap org (sbg orangId1 MAUPUN orangId2) -- dipakai
+  // BFS di bawah utk menelusuri baik pasangannya maupun anak²nya SEKALIGUS,
+  // per pernikahan (bukan per org), supaya gerbang collapse-nya konsisten.
+  const marriagesByPerson = new Map();
+  const addM = (id, m) => {
+    if (!id) return;
+    if (!marriagesByPerson.has(id)) marriagesByPerson.set(id, []);
+    marriagesByPerson.get(id).push(m);
   };
-  marriages.forEach(m => {
-    link(m.orangId1, m.orangId2);
-    (m.childIds || []).forEach(cid => { link(m.orangId1, cid); link(m.orangId2, cid); });
-  });
-
-  const mainComponent = new Set(validRootIds);
-  const queue = [...validRootIds];
-  while (queue.length) {
-    const cur = queue.shift();
-    (adj.get(cur) || new Set()).forEach(n => {
-      if (!mainComponent.has(n)) { mainComponent.add(n); queue.push(n); }
-    });
-  }
+  marriages.forEach(m => { addM(m.orangId1, m); addM(m.orangId2, m); });
 
   const hasParentRecord = new Set();
   marriages.forEach(m => (m.childIds || []).forEach(cid => hasParentRecord.add(cid)));
 
-  people.forEach(p => {
-    if (!mainComponent.has(p.id) && !hasParentRecord.has(p.id)) alienRoots.add(p.id);
+  const validRootIds = (rootIds || []).filter(id => people.some(p => p.id === id));
+  // Fallback kalau rootIds tidak diisi/tidak valid (pemanggil lama yg belum
+  // pakai fitur fokus 1 leluhur): anggap SEMUA org tanpa catatan orang tua
+  // sbg titik awal, spy pohon tetap tergambar penuh spt sebelumnya.
+  const startIds = validRootIds.length
+    ? validRootIds
+    : people.filter(p => !hasParentRecord.has(p.id)).map(p => p.id);
+
+  const visible = new Set(startIds);
+  const queue = [...startIds];
+  while (queue.length) {
+    const cur = queue.shift();
+    (marriagesByPerson.get(cur) || []).forEach(m => {
+      const spouseId = m.orangId1 === cur ? m.orangId2 : m.orangId1;
+      if (spouseId && !visible.has(spouseId)) { visible.add(spouseId); queue.push(spouseId); }
+      // Gerbang buka/tutup keturunan pernikahan ini HARUS dicek per
+      // PERNIKAHAN (pakai id yg sama dgn aturan badgeOwnerSet: istri, atau
+      // ayah sbg fallback kalau ibu tak tercatat) -- BUKAN per org yg lagi
+      // dikunjungi BFS. Kalau dicek per org (mis. lewat suami yg memang tak
+      // pernah punya lencana/collapse sendiri), keturunan tetap bisa
+      // "bocor" tampil walau istrinya sedang diciutkan.
+      const gateId = m.orangId2 || m.orangId1;
+      if (!collapsedSet.has(gateId)) {
+        (m.childIds || []).forEach(cid => {
+          if (!visible.has(cid)) { visible.add(cid); queue.push(cid); }
+        });
+      }
+    });
+  }
+
+  const hidden = new Set();
+  people.forEach(p => { if (!visible.has(p.id)) hidden.add(p.id); });
+
+  // Angka pada lencana "+N": jumlah TOTAL keturunan di balik node yg
+  // diciutkan (dihitung independen dr BFS keterjangkauan di atas, murni
+  // menelusuri anak² -- spt versi sebelumnya), supaya angkanya tetap benar
+  // walau node itu sendiri baru saja terjangkau lewat jalur pasangan.
+  const hiddenCountByCollapsedId = new Map();
+  collapsedSet.forEach(id => {
+    const visited = new Set();
+    collectDescendants(id, childrenByParent, visited);
+    hiddenCountByCollapsedId.set(id, visited.size);
   });
 
-  return alienRoots;
+  return { hidden, badgeOwnerSet: computeBadgeOwnerSet(marriages), hiddenCountByCollapsedId };
 }
 
 // Klik lencana +/- pada sebuah node: toggle status collapse-nya lalu
@@ -222,7 +217,7 @@ const TreeControls = {
     // cuma ada di istri, klik lencana istri hanya melepas id istri dari set
     // sementara id suami tetap tercatat collapse -> keturunan tetap
     // tersembunyi walau lencana sudah menunjukkan "terbuka" (bug).
-    const { badgeOwnerSet } = computeTreeVisibility(last.marriages, new Set());
+    const badgeOwnerSet = computeBadgeOwnerSet(last.marriages);
     const set = getCollapsedSet(container);
     set.clear();
     badgeOwnerSet.forEach(id => set.add(id));
@@ -791,20 +786,22 @@ function truncate(str, n) {
 }
 
 // rootIds (opsional): array id "pasangan utama" (mis. [idDarsa, idKesi]) --
-// dipakai utk menyaring & menyembunyikan default "leluhur lain" yg sama
-// sekali tidak berkerabat dgn pasangan utama (lihat computeAlienRootIds()
-// di atas). Kalau tidak diisi (undefined/[]), tidak ada penyaringan --
-// semua orang digambar spt biasa (perilaku lama, tetap dipakai kalau
-// pemanggilnya belum/tidak perlu fitur ini).
+// dipakai sbg TITIK AWAL BFS keterjangkauan di computeTreeVisibility(): yang
+// tampil pertama kali dibuka HANYA rootIds itu sendiri, semua yang lain
+// (pasangan lain yg tak berkerabat, mertua, ipar, keturunan, dst) baru
+// muncul begitu jalur yg menghubungkannya dibuka lewat lencana +/- --
+// persis konsep tab Jelajah. Kalau tidak diisi (undefined/[]), tidak ada
+// pembatasan titik awal -- semua "leluhur" (org tanpa catatan orang tua)
+// jadi titik awal sekaligus (perilaku lama, dipakai kalau pemanggilnya
+// belum/tidak perlu fitur fokus 1 pasangan utama ini).
 function renderTreeSVG(container, people, marriages, onNodeClick, rootIds) {
   // Simpan data render ini apa adanya (SEBELUM disaring status collapse) --
   // dipakai utk menggambar ulang pohon saat lencana +/- diklik nanti,
   // supaya tree.js tidak perlu bergantung ke admin.js/app.js lagi setelah render pertama.
   lastRenderByContainer.set(container, { people, marriages, onNodeClick, rootIds });
 
-  const extraHiddenIds = computeAlienRootIds(people, marriages, rootIds);
   const collapsedSet = getCollapsedSet(container);
-  const { hidden, badgeOwnerSet, hiddenCountByCollapsedId } = computeTreeVisibility(marriages, collapsedSet, extraHiddenIds);
+  const { hidden, badgeOwnerSet, hiddenCountByCollapsedId } = computeTreeVisibility(people, marriages, collapsedSet, rootIds);
 
   const visiblePeople = people.filter(p => !hidden.has(p.id));
   const visibleIdSet = new Set(visiblePeople.map(p => p.id));

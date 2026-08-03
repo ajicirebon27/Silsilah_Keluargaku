@@ -25,6 +25,7 @@ async function init() {
   setupLaporanModal();
   setupDashboardModal();
   setupJelajahModal();
+  setupViewChooser();
 }
 
 async function loadData() {
@@ -122,24 +123,85 @@ function setZoom(scale) {
 }
 
 // ---------- Search ----------
+// Sama persis dengan setupAdminTreeSearch() di admin.js: hasil pencarian
+// discope ke #tree-container saja (dulu ke seluruh dokumen, tapi ini lebih
+// konsisten & aman kalau nanti ada elemen .tree-node lain di luar pohon).
 function setupSearch() {
-  const input = document.getElementById('search-input');
+  const input = document.getElementById('tree-search');
+  if (!input) return;
   input.addEventListener('input', () => {
     const q = input.value.trim().toLowerCase();
-    document.querySelectorAll('.tree-node').forEach(node => {
+    document.querySelectorAll('#tree-container .tree-node').forEach(node => {
       const id = node.dataset.id;
       const person = allPeople.find(p => p.id === id);
       const match = q && person && person.nama.toLowerCase().includes(q);
       node.classList.toggle('highlight', !!match);
+      // Lepas glow lama dari SEMUA node dulu (bukan cuma dr hasil sebelumnya)
+      // supaya saat pencarian diganti, node lama yg tak lagi relevan tidak
+      // ikut menyala terus.
+      node.classList.remove('search-focus');
     });
     if (q) {
       const found = allPeople.find(p => p.nama.toLowerCase().includes(q));
       if (found) {
-        const el = document.querySelector(`.tree-node[data-id="${found.id}"]`);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        const el = document.querySelector(`#tree-container .tree-node[data-id="${found.id}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+          // Paksa reflow sblm nambah kelas supaya animasi glow selalu mulai
+          // dr awal lagi, walau elemen yg sama sdh pernah kena glow ini
+          // sebelumnya (mis. user masih mengetik nama yg sama tokohnya).
+          void el.getBoundingClientRect();
+          el.classList.add('search-focus');
+        }
       }
     }
   });
+}
+
+// ---------- Pilihan tampilan awal (Pohon vs Jelajah/Kartu) ----------
+// Saat halaman publik pertama dibuka, tamu memilih dulu mau lihat silsilah
+// dlm bentuk pohon (grafik lengkap, #tree-view-section) atau kartu/Jelajah
+// (drill-down satu keluarga per layar, pakai modal Jelajah yang sudah ada).
+// Kalau tamu memilih Jelajah dari layar ini lalu menutupnya (tombol X atau
+// klik area luar), dikembalikan lagi ke layar pilihan ini -- bukan ke layar
+// kosong -- supaya tamu bisa pilih ulang. Kalau Jelajah dibuka belakangan
+// lewat tombol topbar (setelah salah satu tampilan sudah aktif), menutupnya
+// cukup kembali ke tampilan yang sedang aktif seperti biasa.
+let jelajahOpenedFromChooser = false;
+
+function setupViewChooser() {
+  const chooser = document.getElementById('view-chooser');
+  const treeSection = document.getElementById('tree-view-section');
+  if (!chooser || !treeSection) return;
+
+  document.getElementById('choose-tree').addEventListener('click', () => {
+    chooser.style.display = 'none';
+    treeSection.style.display = '';
+    // Saat loadData() memanggil TreeControls.focusOn() tadi, tree-view-section
+    // masih display:none sehingga scrollIntoView tidak berpengaruh apa-apa
+    // (elemen belum punya ukuran/posisi). Panggil ulang sekarang setelah
+    // section-nya benar-benar terlihat, supaya leluhur utama tetap langsung
+    // ke tengah layar begitu tampilan Pohon dipilih.
+    requestAnimationFrame(() => {
+      TreeControls.focusOn(treeContainer, RelationRules.findDefaultTreeFocusId(allPeople, allMarriages, appSettings.rootPersonId));
+    });
+  });
+
+  document.getElementById('choose-jelajah').addEventListener('click', () => {
+    chooser.style.display = 'none';
+    jelajahOpenedFromChooser = true;
+    openJelajahModal();
+  });
+
+  const btnSwitch = document.getElementById('btn-switch-view');
+  if (btnSwitch) {
+    btnSwitch.addEventListener('click', () => {
+      document.getElementById('jelajah-modal').style.display = 'none';
+      jelajahOpenedFromChooser = false;
+      treeSection.style.display = 'none';
+      chooser.style.display = 'flex';
+    });
+  }
 }
 
 // ---------- Modal detail ----------
@@ -291,17 +353,28 @@ function setupDashboardModal() {
   document.getElementById('dashboard-modal').addEventListener('click', e => {
     if (e.target.id === 'dashboard-modal') closeDashboardModal();
   });
+
+  // Klik salah satu kartu -> tampilkan daftar nama di baliknya.
+  document.getElementById('dashboard-content').addEventListener('click', e => {
+    const card = e.target.closest('.dashboard-card-clickable');
+    if (card) openDashboardDetail(card.dataset.key);
+  });
+  document.getElementById('dashboard-detail-close').addEventListener('click', closeDashboardDetail);
+  document.getElementById('dashboard-detail-modal').addEventListener('click', e => {
+    if (e.target.id === 'dashboard-detail-modal') closeDashboardDetail();
+  });
+  document.getElementById('dashboard-detail-search').addEventListener('input', renderDashboardDetailRows);
 }
 
 function openDashboardModal() {
   const stats = StatsAPI.computeBasicStats(allPeople, allMarriages);
   const cards = [
-    { label: 'Total Orang', value: stats.totalOrang, icon: '👥', tone: 'blue' },
-    { label: 'Total Keluarga / Pasangan', value: stats.totalKeluarga, icon: '💍', tone: 'green' },
-    { label: 'Laki-laki', value: stats.laki, icon: '👨', tone: 'blue' },
-    { label: 'Perempuan', value: stats.perempuan, icon: '👩', tone: 'pink' },
-    { label: 'Anak Tercatat', value: stats.totalAnakTercatat, icon: '🧒', tone: 'green' },
-    { label: 'Jumlah Generasi', value: stats.maxGenerasi, icon: '🌳', tone: 'blue' }
+    { label: 'Total Orang', value: stats.totalOrang, icon: '👥', tone: 'blue', key: 'totalOrang' },
+    { label: 'Total Keluarga / Pasangan', value: stats.totalKeluarga, icon: '💍', tone: 'green', key: 'totalKeluarga' },
+    { label: 'Laki-laki', value: stats.laki, icon: '👨', tone: 'blue', key: 'laki' },
+    { label: 'Perempuan', value: stats.perempuan, icon: '👩', tone: 'pink', key: 'perempuan' },
+    { label: 'Anak Tercatat', value: stats.totalAnakTercatat, icon: '🧒', tone: 'green', key: 'totalAnakTercatat' },
+    { label: 'Jumlah Generasi', value: stats.maxGenerasi, icon: '🌳', tone: 'blue', key: 'maxGenerasi' }
   ];
   document.getElementById('dashboard-content').innerHTML = DashboardView.buildCardsHTML(cards);
   document.getElementById('dashboard-modal').style.display = 'flex';
@@ -309,6 +382,31 @@ function openDashboardModal() {
 
 function closeDashboardModal() {
   document.getElementById('dashboard-modal').style.display = 'none';
+}
+
+// ---------- Modal Detail Dashboard (daftar nama di balik satu kartu) ----------
+let dashboardDetailRows = [];
+
+function openDashboardDetail(key) {
+  const detail = StatsAPI.getDetail(key, allPeople, allMarriages);
+  dashboardDetailRows = detail.rows;
+  document.getElementById('dashboard-detail-title').textContent = detail.title || 'Detail';
+  document.getElementById('dashboard-detail-count').textContent = `${detail.rows.length} data`;
+  const searchBox = document.getElementById('dashboard-detail-search');
+  searchBox.value = '';
+  searchBox.style.display = detail.rows.length > 8 ? 'block' : 'none';
+  renderDashboardDetailRows();
+  document.getElementById('dashboard-detail-modal').style.display = 'flex';
+}
+
+function renderDashboardDetailRows() {
+  const q = (document.getElementById('dashboard-detail-search').value || '').trim().toLowerCase();
+  const rows = q ? dashboardDetailRows.filter(r => (r.nama || '').toLowerCase().includes(q)) : dashboardDetailRows;
+  document.getElementById('dashboard-detail-list').innerHTML = DashboardView.buildDetailListHTML(rows);
+}
+
+function closeDashboardDetail() {
+  document.getElementById('dashboard-detail-modal').style.display = 'none';
 }
 
 // ---------- Jelajah Keluarga (mode kartu, drill-down per keturunan) ----------
@@ -341,8 +439,18 @@ let jelajahCurrentPickerEntries = [];  // entry level-leluhur yg sedang tampil s
 // dibuka sebelumnya (itulah caranya bisa turun ke level yg sekarang).
 let jelajahShowChildren = false;
 
+// Apakah sesi Jelajah ini dimulai langsung dari 1 leluhur utama tetap (root
+// disetel admin di Setting, dan tidak poligami) -- artinya kartu leluhur itu
+// SENDIRI adalah "tampilan utama"/titik paling awal jalur ini, jadi tombol
+// "Kembali" harus BERHENTI di situ (tidak boleh mundur lagi ke daftar pilih
+// leluhur, karena tamu memang tidak pernah lewat daftar itu). Kalau false
+// (root belum disetel / poligami / harus pilih dulu), titik paling awal
+// jalurnya adalah daftar pilih leluhur (jelajahPath kosong).
+let jelajahHasFixedRoot = false;
+
 function setupJelajahModal() {
-  document.getElementById('btn-jelajah').addEventListener('click', openJelajahModal);
+  const btnJelajah = document.getElementById('btn-jelajah');
+  if (btnJelajah) btnJelajah.addEventListener('click', openJelajahModal);
   document.getElementById('jelajah-modal-close').addEventListener('click', closeJelajahModal);
   document.getElementById('jelajah-modal').addEventListener('click', e => {
     if (e.target.id === 'jelajah-modal') closeJelajahModal();
@@ -417,8 +525,10 @@ function openJelajahModal() {
     // Kalau leluhur utama cuma py 1 pernikahan -> langsung tampil sbg kartu besar
     // tanpa perlu pilih dulu. Kalau poligami (jarang utk leluhur utama), tamu
     // pilih dulu (via sub-list) pernikahan mana yg mau ditelusuri.
-    jelajahPath = rootNodes.length === 1 ? [rootNodes[0]] : [];
+    jelajahHasFixedRoot = rootNodes.length === 1;
+    jelajahPath = jelajahHasFixedRoot ? [rootNodes[0]] : [];
   } else {
+    jelajahHasFixedRoot = false;
     jelajahPath = [];
   }
   jelajahShowChildren = false;
@@ -428,6 +538,11 @@ function openJelajahModal() {
 
 function closeJelajahModal() {
   document.getElementById('jelajah-modal').style.display = 'none';
+  if (jelajahOpenedFromChooser) {
+    jelajahOpenedFromChooser = false;
+    const chooser = document.getElementById('view-chooser');
+    if (chooser) chooser.style.display = 'flex';
+  }
 }
 
 // entryIdx = index kartu di jelajahCurrentPickerEntries/jelajahCurrentChildEntries.
@@ -451,7 +566,18 @@ function jelajahBukaAnak() {
   renderJelajah();
 }
 
+// Titik paling awal jalur jelajah sekarang -- kalau sesi ini mulai dari
+// leluhur utama tetap, titik awalnya adalah kartu leluhur itu sendiri
+// (panjang jalur 1), bukan daftar pilih leluhur (panjang jalur 0).
+function jelajahMinPathLen() {
+  return jelajahHasFixedRoot ? 1 : 0;
+}
+
 function jelajahKembali() {
+  // Sudah di kartu/panel paling awal (mis. leluhur utama) -- jangan mundur
+  // lebih jauh lagi, supaya urutan "Kembali" berhenti persis di titik mulai
+  // yang sama dengan urutan maju sebelumnya (kebalikan urutan kunjungan).
+  if (jelajahPath.length <= jelajahMinPathLen()) return;
   jelajahPath.pop();
   jelajahShowChildren = true; // level ini sebelumnya memang sudah dibuka (asal bisa turun ke bawahnya)
   renderJelajah();
@@ -631,7 +757,7 @@ function renderJelajah() {
   bodyEl.innerHTML = `
     ${renderJelajahBigCard(topNode, jelajahShowChildren)}
     ${childrenSection}
-    <div class="jelajah-back-row"><button class="btn-link" onclick="jelajahKembali()">&larr; Kembali</button></div>
+    ${jelajahPath.length > jelajahMinPathLen() ? `<div class="jelajah-back-row"><button class="btn-link" onclick="jelajahKembali()">&larr; Kembali</button></div>` : ''}
   `;
 }
 

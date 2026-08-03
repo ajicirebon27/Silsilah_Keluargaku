@@ -13,30 +13,57 @@
 <header class="topbar">
   <div class="topbar-title" id="app-title">Silsilah Keluarga</div>
   <div class="topbar-actions">
-    <input type="text" id="search-input" placeholder="Cari nama..." class="search-box">
+    <button id="btn-switch-view" class="admin-link" title="Ganti tampilan Pohon/Jelajah">Ganti Tampilan</button>
     <button id="btn-dashboard" class="admin-link">Dashboard</button>
-    <button id="btn-jelajah" class="admin-link">Jelajah</button>
-    <button id="btn-laporan" class="admin-link">Laporan</button>
+    <button id="btn-laporan" class="admin-link">🔍 Cari Data</button>
     <a href="admin.html" class="admin-link" title="Masuk sebagai Admin">Admin</a>
   </div>
 </header>
 
+<!-- Layar pilihan awal: tamu memilih dulu mau lihat silsilah dalam bentuk
+     pohon (grafik lengkap) atau kartu/Jelajah (drill-down satu keluarga per
+     layar). Tampil pertama kali halaman dibuka, sebelum data pohon terlihat. -->
+<div id="view-chooser" class="view-chooser-overlay">
+  <div class="view-chooser-card">
+    <h2>Pilih Tampilan Silsilah Keluarga</h2>
+    <p class="comment-hint">Pilih cara kamu ingin menjelajahi silsilah keluarga ini.</p>
+    <div class="view-chooser-options">
+      <button id="choose-tree" class="view-choice-btn">
+        <span class="view-choice-icon">🌳</span>
+        <span class="view-choice-label">Pohon Keluarga</span>
+        <span class="view-choice-desc">Lihat seluruh silsilah dalam bentuk pohon</span>
+      </button>
+      <button id="choose-jelajah" class="view-choice-btn">
+        <span class="view-choice-icon">🗂️</span>
+        <span class="view-choice-label">Jelajah (Kartu)</span>
+        <span class="view-choice-desc">Telusuri keluarga satu per satu lewat kartu</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <main>
-  <div id="tree-wrapper" class="tree-wrapper">
-    <div id="tree-container" class="tree-container"></div>
-  </div>
+  <div id="tree-view-section" class="tree-view-section" style="display:none">
+    <div class="tree-toolbar-float">
+      <input type="text" id="tree-search" placeholder="Cari nama di pohon..." class="search-box-float">
+      <button id="tree-expand-all" class="btn-secondary btn-tree-float">Perluas Semua</button>
+      <button id="tree-collapse-all" class="btn-secondary btn-tree-float">Ciutkan Semua</button>
+    </div>
 
-  <div id="empty-state" class="empty-state" style="display:none">
-    <p>Belum ada data silsilah keluarga.</p>
-    <p class="empty-sub">Admin dapat mulai menambahkan data lewat halaman Admin.</p>
-  </div>
+    <div id="tree-wrapper" class="tree-wrapper">
+      <div id="tree-container" class="tree-container"></div>
+    </div>
 
-  <div class="zoom-controls">
-    <button id="zoom-in" aria-label="Perbesar">+</button>
-    <button id="zoom-reset" aria-label="Reset tampilan">⤢</button>
-    <button id="zoom-out" aria-label="Perkecil">−</button>
-    <button id="tree-expand-all" aria-label="Perluas semua keturunan" title="Perluas Semua">&#8862;</button>
-    <button id="tree-collapse-all" aria-label="Ciutkan semua keturunan" title="Ciutkan Semua">&#8863;</button>
+    <div id="empty-state" class="empty-state" style="display:none">
+      <p>Belum ada data silsilah keluarga.</p>
+      <p class="empty-sub">Admin dapat mulai menambahkan data lewat halaman Admin.</p>
+    </div>
+
+    <div class="zoom-controls">
+      <button id="zoom-in" aria-label="Perbesar">+</button>
+      <button id="zoom-reset" aria-label="Reset tampilan">⤢</button>
+      <button id="zoom-out" aria-label="Perkecil">−</button>
+    </div>
   </div>
 </main>
 
@@ -67,6 +94,17 @@
     <h2>Dashboard Silsilah Keluarga</h2>
     <p class="comment-hint">Ringkasan jumlah data yang tercatat pada pohon keluarga ini.</p>
     <div id="dashboard-content"></div>
+  </div>
+</div>
+
+<!-- Modal Detail Dashboard (daftar nama di balik satu kartu yang diklik) -->
+<div id="dashboard-detail-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card modal-wide">
+    <button class="modal-close" id="dashboard-detail-close">&times;</button>
+    <h2 id="dashboard-detail-title">Detail</h2>
+    <p id="dashboard-detail-count" class="dashboard-detail-count"></p>
+    <input type="text" id="dashboard-detail-search" placeholder="Cari nama..." class="relasi-search-box" style="display:none">
+    <div id="dashboard-detail-list"></div>
   </div>
 </div>
 

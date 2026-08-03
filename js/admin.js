@@ -131,6 +131,7 @@ async function bootAdmin() {
   setupSettings();
   setupDownload();
   setupAdminTreeSearch();
+  setupDashboardDetailModal();
   await refreshAll();
   await refreshCommentBadge();
   await refreshTrashBadge();
@@ -184,6 +185,7 @@ function setupTabs() {
       if (btn.dataset.tab === 'tab-komentar') renderComments();
       if (btn.dataset.tab === 'tab-sampah') renderTrash();
       if (btn.dataset.tab === 'tab-dashboard') renderAdminDashboard();
+      if (btn.dataset.tab === 'tab-jelajah') openAdminJelajah();
     });
   });
 }
@@ -1041,19 +1043,19 @@ async function renderAdminDashboard() {
   ]);
 
   const cards = [
-    { label: 'Total Orang', value: stats.totalOrang, icon: '👥', tone: 'blue' },
-    { label: 'Total Keluarga / Pasangan', value: stats.totalKeluarga, icon: '💍', tone: 'green' },
-    { label: 'Laki-laki', value: stats.laki, icon: '👨', tone: 'blue' },
-    { label: 'Perempuan', value: stats.perempuan, icon: '👩', tone: 'pink' },
-    { label: 'Anak Tercatat', value: stats.totalAnakTercatat, icon: '🧒', tone: 'green' },
-    { label: 'Jumlah Generasi', value: stats.maxGenerasi, icon: '🌳', tone: 'blue' },
-    { label: 'Keluarga Poligami', value: stats.totalPoligami, icon: '🔀', tone: 'green' },
-    { label: 'Komentar Belum Dibaca', value: unreadComments, icon: '💬', tone: unreadComments > 0 ? 'amber' : 'blue' },
-    { label: 'Belum Ada Relasi', value: stats.belumTerelasi, icon: '⚠️', tone: stats.belumTerelasi > 0 ? 'amber' : 'blue' },
-    { label: 'Jenis Kelamin Bermasalah', value: stats.genderInvalid, icon: '⚠️', tone: stats.genderInvalid > 0 ? 'amber' : 'blue' },
-    { label: 'Belum Ada Foto', value: stats.tanpaFoto, icon: '🖼️', tone: 'blue' },
-    { label: 'Belum Ada Tanggal Lahir', value: stats.tanpaTglLahir, icon: '📅', tone: 'blue' },
-    { label: 'Data di Sampah', value: trash.length, icon: '🗑️', tone: trash.length > 0 ? 'amber' : 'blue' }
+    { label: 'Total Orang', value: stats.totalOrang, icon: '👥', tone: 'blue', key: 'totalOrang' },
+    { label: 'Total Keluarga / Pasangan', value: stats.totalKeluarga, icon: '💍', tone: 'green', key: 'totalKeluarga' },
+    { label: 'Laki-laki', value: stats.laki, icon: '👨', tone: 'blue', key: 'laki' },
+    { label: 'Perempuan', value: stats.perempuan, icon: '👩', tone: 'pink', key: 'perempuan' },
+    { label: 'Anak Tercatat', value: stats.totalAnakTercatat, icon: '🧒', tone: 'green', key: 'totalAnakTercatat' },
+    { label: 'Jumlah Generasi', value: stats.maxGenerasi, icon: '🌳', tone: 'blue', key: 'maxGenerasi' },
+    { label: 'Keluarga Poligami', value: stats.totalPoligami, icon: '🔀', tone: 'green', key: 'totalPoligami' },
+    { label: 'Komentar Belum Dibaca', value: unreadComments, icon: '💬', tone: unreadComments > 0 ? 'amber' : 'blue', key: 'komentarBelumDibaca' },
+    { label: 'Belum Ada Relasi', value: stats.belumTerelasi, icon: '⚠️', tone: stats.belumTerelasi > 0 ? 'amber' : 'blue', key: 'belumTerelasi' },
+    { label: 'Jenis Kelamin Bermasalah', value: stats.genderInvalid, icon: '⚠️', tone: stats.genderInvalid > 0 ? 'amber' : 'blue', key: 'genderInvalid' },
+    { label: 'Belum Ada Foto', value: stats.tanpaFoto, icon: '🖼️', tone: 'blue', key: 'tanpaFoto' },
+    { label: 'Belum Ada Tanggal Lahir', value: stats.tanpaTglLahir, icon: '📅', tone: 'blue', key: 'tanpaTglLahir' },
+    { label: 'Data di Sampah', value: trash.length, icon: '🗑️', tone: trash.length > 0 ? 'amber' : 'blue', key: 'dataSampah' }
   ];
   contentEl.innerHTML = DashboardView.buildCardsHTML(cards);
 
@@ -1070,6 +1072,70 @@ async function renderAdminDashboard() {
         </div>`).join('')
       : '<p class="empty-row-sm">Belum ada data.</p>';
   }
+}
+
+// ---------- Modal Detail Dashboard (daftar nama di balik satu kartu) ----------
+let dashboardDetailRows = [];
+
+function setupDashboardDetailModal() {
+  // #admin-dashboard-content sendiri tidak pernah diganti (cuma isinya lewat
+  // innerHTML tiap renderAdminDashboard), jadi delegasi klik di sini aman
+  // dipasang sekali saja saat boot.
+  document.getElementById('admin-dashboard-content').addEventListener('click', e => {
+    const card = e.target.closest('.dashboard-card-clickable');
+    if (card) openDashboardDetail(card.dataset.key);
+  });
+  document.getElementById('dashboard-detail-close').addEventListener('click', closeDashboardDetail);
+  document.getElementById('dashboard-detail-modal').addEventListener('click', e => {
+    if (e.target.id === 'dashboard-detail-modal') closeDashboardDetail();
+  });
+  document.getElementById('dashboard-detail-search').addEventListener('input', renderDashboardDetailRows);
+}
+
+// Kartu "Komentar Belum Dibaca" & "Data di Sampah" datanya bukan dari
+// allPeople/allMarriages (beda koleksi Firestore), jadi diambil terpisah
+// di sini -- kartu lainnya cukup lewat StatsAPI.getDetail().
+async function openDashboardDetail(key) {
+  let title = '', rows = [];
+
+  if (key === 'komentarBelumDibaca') {
+    const peopleMap = new Map(allPeople.map(p => [p.id, p]));
+    const semuaKomentar = await CommentAPI.getAll().catch(() => []);
+    title = 'Komentar Belum Dibaca';
+    rows = semuaKomentar
+      .filter(c => !c.sudahDibaca)
+      .map(c => ({
+        nama: c.namaPengirim || '(tanpa nama)',
+        ket: `untuk ${peopleMap.get(c.orangId)?.nama || 'orang tidak diketahui'}`
+      }));
+  } else if (key === 'dataSampah') {
+    const trash = await PeopleAPI.getTrash().catch(() => []);
+    title = 'Data di Sampah';
+    rows = trash.map(p => ({ nama: p.nama, ket: p.jenisKelamin || '-' }));
+  } else {
+    const detail = StatsAPI.getDetail(key, allPeople, allMarriages);
+    title = detail.title;
+    rows = detail.rows;
+  }
+
+  dashboardDetailRows = rows;
+  document.getElementById('dashboard-detail-title').textContent = title || 'Detail';
+  document.getElementById('dashboard-detail-count').textContent = `${rows.length} data`;
+  const searchBox = document.getElementById('dashboard-detail-search');
+  searchBox.value = '';
+  searchBox.style.display = rows.length > 8 ? 'block' : 'none';
+  renderDashboardDetailRows();
+  document.getElementById('dashboard-detail-modal').style.display = 'flex';
+}
+
+function renderDashboardDetailRows() {
+  const q = (document.getElementById('dashboard-detail-search').value || '').trim().toLowerCase();
+  const rows = q ? dashboardDetailRows.filter(r => (r.nama || '').toLowerCase().includes(q)) : dashboardDetailRows;
+  document.getElementById('dashboard-detail-list').innerHTML = DashboardView.buildDetailListHTML(rows);
+}
+
+function closeDashboardDetail() {
+  document.getElementById('dashboard-detail-modal').style.display = 'none';
 }
 
 // ======================================================================
@@ -1244,12 +1310,23 @@ function setupAdminTreeSearch() {
       const person = allPeople.find(p => p.id === id);
       const match = q && person && person.nama.toLowerCase().includes(q);
       node.classList.toggle('highlight', !!match);
+      // Lepas glow lama dari SEMUA node dulu (bukan cuma dr hasil sebelumnya)
+      // supaya saat pencarian diganti, node lama yg tak lagi relevan tidak
+      // ikut menyala terus.
+      node.classList.remove('search-focus');
     });
     if (q) {
       const found = allPeople.find(p => p.nama.toLowerCase().includes(q));
       if (found) {
         const el = document.querySelector(`#admin-tree-container .tree-node[data-id="${found.id}"]`);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+          // Paksa reflow sblm nambah kelas supaya animasi glow selalu mulai
+          // dr awal lagi, walau elemen yg sama sdh pernah kena glow ini
+          // sebelumnya (mis. user masih mengetik nama yg sama tokohnya).
+          void el.getBoundingClientRect();
+          el.classList.add('search-focus');
+        }
       }
     }
   });
@@ -1284,3 +1361,274 @@ function setupDownload() {
 setInterval(() => {
   if (auth.currentUser) refreshCommentBadge();
 }, 30000);
+
+// ======================================================================
+// TAB: JELAJAH KELUARGA (mode kartu, drill-down per keturunan)
+// Port persis dari fitur Jelajah tampilan publik (lihat app.js) supaya admin
+// juga punya cara telusuri silsilah satu keluarga per layar, bukan cuma
+// lewat grafik pohon penuh di tab "Pohon Keluarga". Bedanya dengan versi
+// publik: tombol "Biodata" di sini membuka FORM EDIT orang tsb
+// (openEditPerson, sama seperti klik kotak di tab Pohon Keluarga), bukan
+// modal detail baca-saja (krn admin memang tidak punya modal itu) -- dan
+// tidak difilter oleh "Keluarga Utama" (admin selalu melihat SEMUA
+// keluarga, sama seperti tab Pohon Keluarga).
+let jelajahPath = [];
+let jelajahCurrentChildEntries = [];
+let jelajahCurrentPickerEntries = [];
+let jelajahShowChildren = false;
+let jelajahHasFixedRoot = false;
+
+function jelajahGetPersonMarriageNodes(personId) {
+  const marriagesOf = allMarriages
+    .filter(m => m.orangId1 === personId || m.orangId2 === personId)
+    .sort((a, b) => (a.urutanPasangan || 1) - (b.urutanPasangan || 1));
+
+  if (marriagesOf.length === 0) {
+    return [{ personAId: personId, personBId: null, marriageId: null, indexLabel: null, childIds: [] }];
+  }
+  const isPoly = marriagesOf.length > 1;
+  return marriagesOf.map((m, idx) => {
+    const partnerId = m.orangId1 === personId ? m.orangId2 : m.orangId1;
+    return {
+      personAId: personId,
+      personBId: partnerId || null,
+      marriageId: m.id,
+      indexLabel: isPoly ? (idx + 1) : null,
+      childIds: m.childIds || []
+    };
+  });
+}
+
+function jelajahMakeEntry(personId) {
+  return { personId, nodes: jelajahGetPersonMarriageNodes(personId) };
+}
+
+function jelajahGetChildEntriesOf(node) {
+  return (node.childIds || []).map(cid => jelajahMakeEntry(cid));
+}
+
+function jelajahGetRootPickerEntries() {
+  const leluhurList = allPeople.filter(p => {
+    const { ayah, ibu } = RelationRules.getParents(p.id, allPeople, allMarriages);
+    return !ayah && !ibu;
+  });
+  const seenMarriageIds = new Set();
+  const result = [];
+  leluhurList.forEach(p => {
+    const nodes = jelajahGetPersonMarriageNodes(p.id);
+    const belumMenikah = nodes.length === 1 && !nodes[0].marriageId;
+    if (belumMenikah) { result.push({ personId: p.id, nodes }); return; }
+
+    const nodesBaru = nodes.filter(n => !seenMarriageIds.has(n.marriageId));
+    if (nodesBaru.length === 0) return;
+    nodesBaru.forEach(n => seenMarriageIds.add(n.marriageId));
+    result.push({ personId: p.id, nodes: nodesBaru });
+  });
+  return result;
+}
+
+// Dipanggil setiap kali tab "Jelajah" dibuka -- reset jalur ke titik awal
+// (leluhur utama kalau "Keluarga Utama" disetel di Setting, atau daftar
+// pilih leluhur kalau belum), sama seperti openJelajahModal() di publik.
+function openAdminJelajah() {
+  const rootId = cachedAppSettings.rootPersonId;
+  const rootValid = rootId && allPeople.some(p => p.id === rootId);
+  if (rootValid) {
+    const rootNodes = jelajahGetPersonMarriageNodes(rootId);
+    jelajahHasFixedRoot = rootNodes.length === 1;
+    jelajahPath = jelajahHasFixedRoot ? [rootNodes[0]] : [];
+  } else {
+    jelajahHasFixedRoot = false;
+    jelajahPath = [];
+  }
+  jelajahShowChildren = false;
+  renderAdminJelajah();
+}
+
+function jelajahMasukChild(entryIdx, nodeIdx) {
+  const source = jelajahPath.length === 0 ? jelajahCurrentPickerEntries : jelajahCurrentChildEntries;
+  const entry = source[entryIdx];
+  if (!entry) return;
+  const node = entry.nodes[nodeIdx || 0];
+  if (!node) return;
+  jelajahPath.push(node);
+  jelajahShowChildren = false;
+  renderAdminJelajah();
+}
+
+function jelajahBukaAnak() {
+  jelajahShowChildren = true;
+  renderAdminJelajah();
+}
+
+function jelajahMinPathLen() {
+  return jelajahHasFixedRoot ? 1 : 0;
+}
+
+function jelajahKembali() {
+  if (jelajahPath.length <= jelajahMinPathLen()) return;
+  jelajahPath.pop();
+  jelajahShowChildren = true;
+  renderAdminJelajah();
+}
+
+function jelajahKeBreadcrumb(index) {
+  jelajahPath = jelajahPath.slice(0, index + 1);
+  jelajahShowChildren = true;
+  renderAdminJelajah();
+}
+
+function jelajahNodeLabel(node) {
+  const a = allPeople.find(p => p.id === node.personAId);
+  const b = node.personBId ? allPeople.find(p => p.id === node.personBId) : null;
+  const namaA = a ? a.nama : '?';
+  return escapeHtml(b ? `${namaA} & ${b.nama}` : namaA);
+}
+
+function renderJelajahBigCard(node, showChildren) {
+  const personA = allPeople.find(p => p.id === node.personAId);
+  if (!personA) return '';
+  const personB = node.personBId ? allPeople.find(p => p.id === node.personBId) : null;
+  const isFemaleA = personA.jenisKelamin === 'Perempuan';
+
+  const title = personB
+    ? `${escapeHtml(personA.nama)} &amp; ${escapeHtml(personB.nama)}`
+    : escapeHtml(personA.nama);
+  const genderSub = personB
+    ? `${escapeHtml(personA.jenisKelamin || '-')} &amp; ${escapeHtml(personB.jenisKelamin || '-')}`
+    : escapeHtml(personA.jenisKelamin || '-');
+  const polyTag = node.indexLabel
+    ? `<span class="jelajah-poly-tag">Pernikahan ke-${node.indexLabel}</span>`
+    : '';
+  const childCount = (node.childIds || []).length;
+  const childInfo = `<div class="jelajah-card-childinfo">${childCount ? childCount + ' anak tercatat' : 'Belum ada anak tercatat'}</div>`;
+  const biodataLinks = `
+    <div class="jelajah-card-links">
+      <button class="btn-link jelajah-biodata-link" onclick="event.stopPropagation();openEditPerson('${node.personAId}')">Biodata ${escapeHtml(personA.nama)}</button>
+      ${personB ? `<button class="btn-link jelajah-biodata-link" onclick="event.stopPropagation();openEditPerson('${node.personBId}')">Biodata ${escapeHtml(personB.nama)}</button>` : ''}
+    </div>
+  `;
+  const clickable = !showChildren && childCount > 0;
+  const expandHint = clickable ? `<div class="jelajah-expand-hint">Lihat anak &amp; pasangannya</div>` : '';
+
+  return `
+    <div class="jelajah-card jelajah-card-big ${isFemaleA ? 'jelajah-card-female' : ''} ${clickable ? 'jelajah-card-big-clickable' : ''}"
+      ${clickable ? 'onclick="jelajahBukaAnak()"' : ''}>
+      <div class="jelajah-card-name">${title}</div>
+      <div class="jelajah-card-sub">${genderSub}</div>
+      ${polyTag}
+      ${childInfo}
+      ${expandHint}
+      ${biodataLinks}
+    </div>
+  `;
+}
+
+function renderJelajahEntryCard(entry, entryIdx) {
+  const person = allPeople.find(p => p.id === entry.personId);
+  if (!person) return '';
+  const nodes = entry.nodes;
+
+  if (nodes.length <= 1) {
+    const node = nodes[0];
+    const personB = node.personBId ? allPeople.find(p => p.id === node.personBId) : null;
+    const isFemaleA = person.jenisKelamin === 'Perempuan';
+    const title = personB
+      ? `${escapeHtml(person.nama)} &amp; ${escapeHtml(personB.nama)}`
+      : escapeHtml(person.nama);
+    const genderSub = personB
+      ? `${escapeHtml(person.jenisKelamin || '-')} &amp; ${escapeHtml(personB.jenisKelamin || '-')}`
+      : escapeHtml(person.jenisKelamin || '-');
+    const childCount = (node.childIds || []).length;
+    const childInfo = `<div class="jelajah-card-childinfo">${childCount ? childCount + ' anak tercatat' : 'Belum ada anak tercatat'}</div>`;
+    const biodataLinks = `
+      <div class="jelajah-card-links">
+        <button class="btn-link jelajah-biodata-link" onclick="event.stopPropagation();openEditPerson('${person.id}')">Biodata ${escapeHtml(person.nama)}</button>
+        ${personB ? `<button class="btn-link jelajah-biodata-link" onclick="event.stopPropagation();openEditPerson('${node.personBId}')">Biodata ${escapeHtml(personB.nama)}</button>` : ''}
+      </div>
+    `;
+    return `
+      <div class="jelajah-card jelajah-card-sm ${isFemaleA ? 'jelajah-card-female' : ''}" onclick="jelajahMasukChild(${entryIdx}, 0)">
+        <div class="jelajah-card-name">${title}</div>
+        <div class="jelajah-card-sub">${genderSub}</div>
+        ${childInfo}
+        ${biodataLinks}
+      </div>
+    `;
+  }
+
+  const isMale = person.jenisKelamin === 'Laki-laki';
+  const isFemale = person.jenisKelamin === 'Perempuan';
+  const partnerWord = isMale ? 'Istri' : (isFemale ? 'Suami' : 'Pasangan');
+  const totalAnak = nodes.reduce((sum, n) => sum + (n.childIds || []).length, 0);
+
+  const subRows = nodes.map((n, ni) => {
+    const partner = n.personBId ? allPeople.find(p => p.id === n.personBId) : null;
+    const partnerName = partner ? escapeHtml(partner.nama) : '<span class="jelajah-muted">belum tercatat</span>';
+    const childCount = (n.childIds || []).length;
+    return `
+      <div class="jelajah-subcard" onclick="event.stopPropagation();jelajahMasukChild(${entryIdx}, ${ni})">
+        <span class="jelajah-subcard-order">${partnerWord} ke-${n.indexLabel || (ni + 1)}</span>
+        <span class="jelajah-subcard-name">${partnerName}</span>
+        <span class="jelajah-subcard-info">${childCount ? childCount + ' anak' : 'belum ada anak'}</span>
+        <span class="jelajah-subcard-arrow">&rsaquo;</span>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="jelajah-card jelajah-card-sm jelajah-card-poly ${isFemale ? 'jelajah-card-female' : ''}">
+      <div class="jelajah-card-name">${escapeHtml(person.nama)}</div>
+      <div class="jelajah-card-sub">${escapeHtml(person.jenisKelamin || '-')} &middot; ${nodes.length} pernikahan &middot; ${totalAnak} anak tercatat</div>
+      <div class="jelajah-subcard-list">${subRows}</div>
+      <div class="jelajah-card-links">
+        <button class="btn-link jelajah-biodata-link" onclick="openEditPerson('${person.id}')">Biodata ${escapeHtml(person.nama)}</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminJelajah() {
+  const breadcrumbEl = document.getElementById('admin-jelajah-breadcrumb');
+  const bodyEl = document.getElementById('admin-jelajah-body');
+  if (!breadcrumbEl || !bodyEl) return;
+
+  if (jelajahPath.length === 0) {
+    jelajahCurrentPickerEntries = jelajahGetRootPickerEntries();
+    breadcrumbEl.innerHTML = '';
+    bodyEl.innerHTML = `
+      <p class="jelajah-muted">Pilih leluhur untuk mulai menjelajah:</p>
+      <div class="jelajah-card-list">
+        ${jelajahCurrentPickerEntries.map((entry, i) => renderJelajahEntryCard(entry, i)).join('')
+          || '<p class="jelajah-muted">Belum ada data orang.</p>'}
+      </div>
+    `;
+    return;
+  }
+
+  const crumbHtml = jelajahPath.map((node, i) => {
+    const isLast = i === jelajahPath.length - 1;
+    return `<span class="jelajah-crumb${isLast ? ' jelajah-crumb-active' : ''}" onclick="jelajahKeBreadcrumb(${i})">${jelajahNodeLabel(node)}</span>${isLast ? '' : '<span class="jelajah-crumb-sep">&rsaquo;</span>'}`;
+  }).join('');
+  breadcrumbEl.innerHTML = crumbHtml;
+
+  const topNode = jelajahPath[jelajahPath.length - 1];
+  jelajahCurrentChildEntries = jelajahGetChildEntriesOf(topNode);
+
+  let childrenSection = '';
+  if (jelajahShowChildren) {
+    const childrenHtml = jelajahCurrentChildEntries.length
+      ? `<div class="jelajah-card-list">${jelajahCurrentChildEntries.map((entry, i) => renderJelajahEntryCard(entry, i)).join('')}</div>`
+      : '<p class="jelajah-muted jelajah-noanak">Belum ada anak tercatat.</p>';
+    childrenSection = `
+      <p class="jelajah-group-label jelajah-children-label">Anak &amp; pasangannya:</p>
+      ${childrenHtml}
+    `;
+  }
+
+  bodyEl.innerHTML = `
+    ${renderJelajahBigCard(topNode, jelajahShowChildren)}
+    ${childrenSection}
+    ${jelajahPath.length > jelajahMinPathLen() ? `<div class="jelajah-back-row"><button class="btn-link" onclick="jelajahKembali()">&larr; Kembali</button></div>` : ''}
+  `;
+}

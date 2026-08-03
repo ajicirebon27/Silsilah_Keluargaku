@@ -1,4 +1,4 @@
-const CACHE_NAME = 'silsilah-cache-v3';
+const CACHE_NAME = 'silsilah-cache-v7';
 const ASSETS = [
   './',
   './index.html',
