@@ -1075,7 +1075,9 @@ async function renderAdminDashboard() {
 }
 
 // ---------- Modal Detail Dashboard (daftar nama di balik satu kartu) ----------
+const DASHBOARD_DETAIL_PAGE_SIZE = 10;
 let dashboardDetailRows = [];
+let currentDashboardDetailPage = 1;
 
 function setupDashboardDetailModal() {
   // #admin-dashboard-content sendiri tidak pernah diganti (cuma isinya lewat
@@ -1089,7 +1091,7 @@ function setupDashboardDetailModal() {
   document.getElementById('dashboard-detail-modal').addEventListener('click', e => {
     if (e.target.id === 'dashboard-detail-modal') closeDashboardDetail();
   });
-  document.getElementById('dashboard-detail-search').addEventListener('input', renderDashboardDetailRows);
+  document.getElementById('dashboard-detail-search').addEventListener('input', searchDashboardDetailRows);
 }
 
 // Kartu "Komentar Belum Dibaca" & "Data di Sampah" datanya bukan dari
@@ -1119,6 +1121,7 @@ async function openDashboardDetail(key) {
   }
 
   dashboardDetailRows = rows;
+  currentDashboardDetailPage = 1;
   document.getElementById('dashboard-detail-title').textContent = title || 'Detail';
   document.getElementById('dashboard-detail-count').textContent = `${rows.length} data`;
   const searchBox = document.getElementById('dashboard-detail-search');
@@ -1128,10 +1131,53 @@ async function openDashboardDetail(key) {
   document.getElementById('dashboard-detail-modal').style.display = 'flex';
 }
 
+function searchDashboardDetailRows() {
+  currentDashboardDetailPage = 1;
+  renderDashboardDetailRows();
+}
+
 function renderDashboardDetailRows() {
   const q = (document.getElementById('dashboard-detail-search').value || '').trim().toLowerCase();
   const rows = q ? dashboardDetailRows.filter(r => (r.nama || '').toLowerCase().includes(q)) : dashboardDetailRows;
-  document.getElementById('dashboard-detail-list').innerHTML = DashboardView.buildDetailListHTML(rows);
+
+  const totalCount = rows.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / DASHBOARD_DETAIL_PAGE_SIZE));
+  if (currentDashboardDetailPage > totalPages) currentDashboardDetailPage = totalPages;
+  if (currentDashboardDetailPage < 1) currentDashboardDetailPage = 1;
+  const startIdx = (currentDashboardDetailPage - 1) * DASHBOARD_DETAIL_PAGE_SIZE;
+  const pageRows = rows.slice(startIdx, startIdx + DASHBOARD_DETAIL_PAGE_SIZE);
+
+  document.getElementById('dashboard-detail-list').innerHTML = DashboardView.buildDetailListHTML(pageRows);
+  renderDashboardDetailPagination(totalCount, totalPages);
+}
+
+function renderDashboardDetailPagination(totalCount, totalPages) {
+  const container = document.getElementById('dashboard-detail-pagination');
+  if (!container) return;
+  if (totalCount === 0) { container.innerHTML = ''; return; }
+
+  const startItem = (currentDashboardDetailPage - 1) * DASHBOARD_DETAIL_PAGE_SIZE + 1;
+  const endItem = Math.min(currentDashboardDetailPage * DASHBOARD_DETAIL_PAGE_SIZE, totalCount);
+
+  let pageButtons = '';
+  for (let i = 1; i <= totalPages; i++) {
+    pageButtons += `<button class="page-btn ${i === currentDashboardDetailPage ? 'active' : ''}" onclick="goToDashboardDetailPage(${i})">${i}</button>`;
+  }
+
+  container.innerHTML = `
+    <div class="pagination-info">Menampilkan ${startItem}-${endItem} dari ${totalCount} data</div>
+    ${totalPages > 1 ? `
+    <div class="pagination-controls">
+      <button class="page-btn" onclick="goToDashboardDetailPage(${currentDashboardDetailPage - 1})" ${currentDashboardDetailPage === 1 ? 'disabled' : ''}>&laquo;</button>
+      ${pageButtons}
+      <button class="page-btn" onclick="goToDashboardDetailPage(${currentDashboardDetailPage + 1})" ${currentDashboardDetailPage === totalPages ? 'disabled' : ''}>&raquo;</button>
+    </div>` : ''}
+  `;
+}
+
+function goToDashboardDetailPage(page) {
+  currentDashboardDetailPage = page;
+  renderDashboardDetailRows();
 }
 
 function closeDashboardDetail() {
