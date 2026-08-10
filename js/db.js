@@ -853,6 +853,148 @@ const DashboardView = {
   }
 };
 
+// =====================================================================
+// EXPORT POHON KELUARGA (JPG / PDF)
+// Dipakai bersama oleh admin.js (tab Pohon Keluarga) dan app.js (tampilan
+// publik) supaya logikanya cuma ada di 1 tempat -- lihat setupTreeExportButtons()
+// di masing-masing file untuk pemasangan tombolnya.
+// =====================================================================
+const TreeExportAPI = {
+  // html2canvas & browser (terutama Safari/iOS) punya batas jumlah piksel
+  // kanvas yang bisa dibuat sekaligus -- kalau dilewati, hasilnya BUKAN
+  // error yang jelas, tapi gambar kosong/putih atau terpotong diam-diam.
+  // Supaya pohon besar (ratusan orang) tetap aman diunduh di HP, scale
+  // yang diminta (default 2x demi ketajaman) diturunkan otomatis kalau
+  // ukuran asli kontainer sudah besar, dengan batas aman konservatif
+  // (~16 megapiksel per sisi 8000px) yang berlaku di hampir semua browser.
+  computeSafeScale(container, requestedScale = 2) {
+    const w = container.scrollWidth || 1;
+    const h = container.scrollHeight || 1;
+    const MAX_DIM = 8000;       // batas aman per sisi (px)
+    const MAX_PIXELS = 16e6;    // batas aman total piksel
+    let scale = requestedScale;
+    scale = Math.min(scale, MAX_DIM / w, MAX_DIM / h);
+    scale = Math.min(scale, Math.sqrt(MAX_PIXELS / (w * h)));
+    return Math.max(1, Math.min(requestedScale, scale)); // jangan pernah di bawah 1x atau di atas yang diminta
+  },
+
+  // Render kontainer pohon (SVG) ke <canvas>. Kalau ada cabang yang sedang
+  // diciutkan (collapse), otomatis diperluas dulu (expand all) supaya hasil
+  // unduhan lengkap -- lalu status ciut/lebar SEBELUMNYA dikembalikan persis
+  // seperti semula setelah selesai, supaya tidak mengganggu tampilan yang
+  // sedang dilihat.
+  async renderCanvas(container) {
+    if (typeof html2canvas === 'undefined') {
+      throw new Error('Komponen unduh gambar belum berhasil dimuat (biasanya karena koneksi internet terputus saat halaman dibuka). Pastikan online, lalu muat ulang halaman dan coba lagi.');
+    }
+    const previousCollapsed = TreeControls.getCollapsedIds(container);
+    if (previousCollapsed.length > 0) TreeControls.expandAll(container);
+    // Kasih browser 1 frame utk benar2 selesai reflow/repaint pohon yg baru
+    // diperluas sebelum di-screenshot -- tanpa ini, kadang html2canvas masih
+    // menangkap ukuran/posisi lama (terpotong).
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    try {
+      const scale = this.computeSafeScale(container, 2);
+      return await html2canvas(container, { backgroundColor: '#ffffff', scale });
+    } finally {
+      if (previousCollapsed.length > 0) TreeControls.setCollapsedIds(container, previousCollapsed);
+    }
+  },
+
+  buildFilename(appTitle, ext) {
+    const safeTitle = (appTitle || 'Silsilah Keluarga').replace(/[^a-zA-Z0-9 -]/g, '').trim() || 'Silsilah Keluarga';
+    const tgl = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    return `${safeTitle} - Pohon Keluarga - ${tgl}.${ext}`;
+  },
+
+  async downloadJPG(container, appTitle) {
+    const canvas = await this.renderCanvas(container);
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/jpeg', 0.95);
+    a.download = this.buildFilename(appTitle, 'jpg');
+    a.click();
+  },
+
+  // PDF "poster" -- 1 halaman raksasa mengikuti ukuran pohon apa adanya.
+  // Cocok utk dilihat di layar/tablet atau dicetak di printer format besar
+  // (plotter), TAPI TIDAK bisa dicetak langsung di printer rumahan A4 biasa
+  // (ukuran halamannya bukan A4 standar).
+  async downloadPDFPoster(container, appTitle) {
+    if (typeof window.jspdf === 'undefined') {
+      throw new Error('Komponen pembuat PDF belum berhasil dimuat (biasanya karena koneksi internet terputus saat halaman dibuka). Pastikan online, lalu muat ulang halaman dan coba lagi.');
+    }
+    const canvas = await this.renderCanvas(container);
+    const { jsPDF } = window.jspdf;
+    const orientation = canvas.width > canvas.height ? 'l' : 'p';
+    const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, canvas.width, canvas.height);
+    pdf.save(this.buildFilename(appTitle, 'pdf'));
+  },
+
+  // PDF "siap cetak" -- dipecah otomatis jadi beberapa halaman A4 (dgn
+  // margin) yang tinggal ditempel/dijilid bersambung, supaya bisa langsung
+  // dicetak di printer rumahan biasa. Ini pilihan yang lebih dipakai
+  // kebanyakan orang dibanding versi poster di atas.
+  async downloadPDFCetak(container, appTitle) {
+    if (typeof window.jspdf === 'undefined') {
+      throw new Error('Komponen pembuat PDF belum berhasil dimuat (biasanya karena koneksi internet terputus saat halaman dibuka). Pastikan online, lalu muat ulang halaman dan coba lagi.');
+    }
+    const canvas = await this.renderCanvas(container);
+    const { jsPDF } = window.jspdf;
+    // Pohon keluarga hampir selalu lebih lebar drpd tinggi -> default landscape
+    // supaya jumlah halaman utk disambung tidak berlebihan.
+    const orientation = canvas.width >= canvas.height ? 'l' : 'p';
+    const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+    const margin = 8; // mm
+    const pageW = pdf.internal.pageSize.getWidth() - margin * 2;
+    const pageH = pdf.internal.pageSize.getHeight() - margin * 2;
+
+    // Skala gambar (px -> mm) supaya LEBARnya pas dengan lebar 1 halaman;
+    // tingginya otomatis ikut proporsional, lalu dipotong per-halaman.
+    const pxToMm = pageW / canvas.width;
+    const imgHmm = canvas.height * pxToMm;
+    const totalPages = Math.max(1, Math.ceil(imgHmm / pageH));
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+    for (let page = 0; page < totalPages; page++) {
+      if (page > 0) pdf.addPage();
+      // Trik standar jsPDF: gambar yg sama digambar utuh di tiap halaman,
+      // cuma digeser ke atas sejauh tinggi halaman x nomor halaman --
+      // bagian yg di luar batas halaman otomatis terpotong (clip) oleh PDF,
+      // sehingga tiap halaman hanya menampilkan potongan yg relevan.
+      pdf.addImage(imgData, 'JPEG', margin, margin - page * pageH, pageW, imgHmm);
+      pdf.setFontSize(8);
+      pdf.setTextColor(150);
+      pdf.text(`Halaman ${page + 1}/${totalPages}`, margin, pdf.internal.pageSize.getHeight() - 3);
+    }
+    pdf.save(this.buildFilename(appTitle, 'pdf'));
+  },
+
+  // Pasang 1 tombol unduh: nonaktifkan + ubah teks sementara selagi proses
+  // berjalan (bisa beberapa detik utk pohon besar) supaya tidak diklik
+  // berkali-kali, lalu tampilkan pesan jelas kalau gagal. Dipakai bersama
+  // oleh tab Pohon Keluarga (admin) & tampilan publik (app.js) supaya
+  // perilakunya konsisten di kedua tempat.
+  attachButton(btnId, container, getTitle, exportMethodName) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const originalText = btn.textContent;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Menyiapkan...';
+      try {
+        const title = (getTitle && getTitle()) || 'Silsilah Keluarga';
+        await this[exportMethodName](container, title);
+      } catch (err) {
+        alert('Gagal membuat file: ' + (err.message || 'terjadi kesalahan tak terduga.') + ' Coba lagi, atau ciutkan sebagian cabang dulu kalau datanya sangat besar.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    });
+  }
+};
+
 async function uploadFotoBase64(file) {
   return await compressImageToBase64(file);
 }

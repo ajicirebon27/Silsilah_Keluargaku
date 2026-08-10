@@ -1,5 +1,42 @@
 # Silsilah Keluarga — Panduan Setup
 
+> **Baru di versi ini (v18) -- Unduh Pohon Keluarga sebagai JPG/PDF diperbaiki & dilengkapi:**
+> Sebelumnya tombol Unduh JPG/PDF (admin) sudah ada tapi punya beberapa
+> celah: kalau ada cabang yang sedang diciutkan, hasil unduhan cuma
+> menampilkan yang terlihat saat itu (tidak lengkap, tanpa peringatan);
+> pohon yang sangat besar berisiko menghasilkan file kosong/putih diam-diam
+> di sebagian browser/HP (batas ukuran kanvas terlampaui); dan PDF-nya
+> berupa 1 halaman custom raksasa yang tidak bisa dicetak langsung di
+> printer rumahan biasa (bukan ukuran kertas standar). Sekarang:
+> - Unduh JPG/PDF otomatis **memperluas semua cabang dulu** sebelum
+>   menangkap gambar (supaya selalu lengkap), lalu **mengembalikan
+>   tampilan ciut/lebar persis seperti semula** setelah selesai --
+>   tidak mengganggu apa yang sedang dilihat.
+> - Ukuran kanvas dibatasi otomatis ke batas aman supaya tidak
+>   menghasilkan file kosong/rusak di pohon yang sangat besar atau di
+>   HP dengan memori terbatas.
+> - Ada **2 pilihan PDF**: **"Siap Cetak"** (dipecah otomatis jadi
+>   beberapa halaman A4 bermargin, tinggal dicetak & disambung -- pilihan
+>   yang paling umum dipakai) dan **"Poster"** (1 halaman besar mengikuti
+>   ukuran pohon apa adanya, cocok untuk dilihat di layar/tablet atau
+>   dicetak di plotter/percetakan format besar).
+> - Nama file sekarang otomatis memakai judul aplikasi & tanggal unduh
+>   (mis. `Silsilah Keluarga - Pohon Keluarga - 2026-08-10.pdf`), bukan
+>   nama generik yang sama terus setiap kali diunduh.
+> - Tombol dinonaktifkan sementara (dengan teks "Menyiapkan...") selagi
+>   proses berjalan, dan menampilkan pesan yang jelas kalau gagal --
+>   sebelumnya tidak ada indikasi apa pun selagi diproses.
+> - **Tampilan publik** (yang dibagikan ke keluarga lewat link) kini juga
+>   punya tombol **Unduh JPG** & **Unduh PDF (Siap Cetak)** sendiri di
+>   pojok kanan atas pohon -- sebelumnya fitur unduh hanya ada di panel
+>   admin, jadi anggota keluarga lain harus minta tolong admin kalau mau
+>   simpan/cetak sendiri. Yang diunduh mengikuti apa yang sedang mereka
+>   lihat (kalau admin sudah mengatur "Keluarga Utama untuk Tampilan
+>   Publik", unduhan publik ikut hanya berisi cabang itu saja).
+> - Logikanya kini dipusatkan di satu tempat (`TreeExportAPI` di `js/db.js`)
+>   supaya panel admin & tampilan publik selalu berperilaku sama persis,
+>   bukan 2 salinan kode terpisah yang bisa saling tidak sinkron.
+
 > **Baru di versi ini (v15) -- Fokus default ke leluhur utama saat Pohon
 > Keluarga pertama dibuka:**
 > Sebelumnya, tampilan publik sudah default menciutkan semua keturunan saat

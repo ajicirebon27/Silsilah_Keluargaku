@@ -1559,22 +1559,11 @@ function setupDownload() {
     TreeControls.collapseAll(document.getElementById('admin-tree-container'));
   });
 
-  document.getElementById('btn-download-jpg').addEventListener('click', async () => {
-    const canvas = await html2canvas(document.getElementById('admin-tree-container'), { backgroundColor: '#ffffff', scale: 2 });
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/jpeg', 0.95);
-    a.download = 'pohon-keluarga.jpg';
-    a.click();
-  });
-
-  document.getElementById('btn-download-pdf').addEventListener('click', async () => {
-    const canvas = await html2canvas(document.getElementById('admin-tree-container'), { backgroundColor: '#ffffff', scale: 2 });
-    const { jsPDF } = window.jspdf;
-    const orientation = canvas.width > canvas.height ? 'l' : 'p';
-    const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height] });
-    pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, canvas.width, canvas.height);
-    pdf.save('pohon-keluarga.pdf');
-  });
+  const adminTreeEl = document.getElementById('admin-tree-container');
+  const getTitle = () => cachedAppSettings.judulAplikasi;
+  TreeExportAPI.attachButton('btn-download-jpg', adminTreeEl, getTitle, 'downloadJPG');
+  TreeExportAPI.attachButton('btn-download-pdf-cetak', adminTreeEl, getTitle, 'downloadPDFCetak');
+  TreeExportAPI.attachButton('btn-download-pdf-poster', adminTreeEl, getTitle, 'downloadPDFPoster');
 }
 
 setInterval(() => {

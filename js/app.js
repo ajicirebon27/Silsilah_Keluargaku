@@ -171,6 +171,10 @@ function setupPanZoom() {
   document.getElementById('zoom-reset').addEventListener('click', () => setZoom(1));
   document.getElementById('tree-expand-all').addEventListener('click', () => TreeControls.expandAll(treeContainer));
   document.getElementById('tree-collapse-all').addEventListener('click', () => TreeControls.collapseAll(treeContainer));
+
+  const getTitle = () => appSettings.judulAplikasi;
+  TreeExportAPI.attachButton('tree-download-jpg', treeContainer, getTitle, 'downloadJPG');
+  TreeExportAPI.attachButton('tree-download-pdf-cetak', treeContainer, getTitle, 'downloadPDFCetak');
 }
 
 function setZoom(scale) {

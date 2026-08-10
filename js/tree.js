@@ -204,6 +204,22 @@ const TreeControls = {
     const last = lastRenderByContainer.get(container);
     if (last) renderTreeSVG(container, last.people, last.marriages, last.onNodeClick, last.rootIds);
   },
+  // Ambil salinan id yg sedang diciutkan pada container ini -- dipakai fitur
+  // export gambar/PDF (lihat TreeExportAPI di db.js): perlu expand semua
+  // dulu spy hasil unduhan lengkap, lalu tampilan dikembalikan persis
+  // seperti semula lewat setCollapsedIds() setelah selesai.
+  getCollapsedIds(container) {
+    return Array.from(getCollapsedSet(container));
+  },
+  // Pulihkan set id yg diciutkan persis seperti hasil getCollapsedIds() di atas.
+  setCollapsedIds(container, ids) {
+    const last = lastRenderByContainer.get(container);
+    if (!last) return;
+    const set = getCollapsedSet(container);
+    set.clear();
+    ids.forEach(id => set.add(id));
+    renderTreeSVG(container, last.people, last.marriages, last.onNodeClick, last.rootIds);
+  },
   // Meng-collapse SEMUA orang yang punya anak. Karena penyembunyian
   // keturunan bersifat transitif (collapse leluhur otomatis menyembunyikan
   // seluruh cucu-cicitnya), hasil akhirnya cuma menyisakan generasi
