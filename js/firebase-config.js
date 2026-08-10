@@ -18,3 +18,23 @@ firebase.initializeApp(firebaseConfig);
 
 const db = firebase.firestore();
 const auth = firebase.auth();
+
+// =====================================================================
+// INSTANCE FIREBASE KEDUA (khusus buat akun admin baru dari Panel Admin)
+// =====================================================================
+// Firebase Auth (client SDK) punya perilaku bawaan: begitu
+// createUserWithEmailAndPassword() dipanggil, sesi login otomatis PINDAH
+// ke akun yang baru dibuat -- ini akan membuat admin utama yang sedang
+// login otomatis ter-logout tiap kali membuat admin baru, kalau dipanggil
+// lewat variabel `auth` yang sama. Solusinya: pakai instance app Firebase
+// KEDUA (nama unik) khusus untuk proses pembuatan akun -- sesi login di
+// `auth` (instance utama/pertama) sama sekali tidak tersentuh.
+function getSecondaryAuth() {
+  let secondaryApp;
+  try {
+    secondaryApp = firebase.app('SecondaryAdminCreate');
+  } catch (e) {
+    secondaryApp = firebase.initializeApp(firebaseConfig, 'SecondaryAdminCreate');
+  }
+  return secondaryApp.auth();
+}

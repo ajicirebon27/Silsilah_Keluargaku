@@ -316,6 +316,63 @@ const SettingsAPI = {
 };
 
 // =====================================================================
+// KELOLA ADMIN TAMBAHAN (v16) -- admin utama bisa membuat admin baru
+// dengan hak akses menu terbatas (checklist tab mana saja yang boleh
+// dibuka). Dua koleksi Firestore dipakai:
+//
+// - 'adminLookup' (doc id = username huruf kecil): { email, uid }
+//   Dibaca PUBLIK (tanpa login) karena dibutuhkan saat proses login --
+//   supaya pengguna bisa login pakai "username" biasa (bukan email),
+//   sistem perlu menerjemahkan dulu username -> email asli Firebase Auth
+//   SEBELUM signInWithEmailAndPassword() dipanggil.
+// - 'admins' (doc id = UID Firebase Auth): { username, usernameLower,
+//   permissions: [tab-xxx, ...], createdBy, createdAt, active }
+//   Ini yang jadi acuan hak akses menu & yang divalidasi Firestore Rules
+//   supaya admin tambahan boleh menulis data (lihat README bagian Rules).
+//
+// Catatan penting: menghapus profil di sini (deleteSubAdminProfile) TIDAK
+// menghapus akun login (Firebase Auth) admin tersebut -- itu perlu Admin
+// SDK di server yang tidak tersedia di aplikasi front-end murni seperti
+// ini. Yang terjadi: begitu profil dihapus, akun itu kehilangan SEMUA
+// akses (tidak lolos cek admin di Rules, dan saat mencoba login lagi akan
+// otomatis ditolak & dikeluarkan -- lihat resolveAdminProfile() di
+// admin.js), jadi secara praktis aksesnya sudah tercabut total.
+// =====================================================================
+const AdminManagementAPI = {
+  async findEmailByUsername(usernameLower) {
+    const doc = await db.collection('adminLookup').doc(usernameLower).get();
+    return doc.exists ? doc.data().email : null;
+  },
+  async isUsernameTaken(usernameLower) {
+    const doc = await db.collection('adminLookup').doc(usernameLower).get();
+    return doc.exists;
+  },
+  async getAllSubAdmins() {
+    const snap = await db.collection('admins').get();
+    return snap.docs
+      .map(d => ({ uid: d.id, ...d.data() }))
+      .sort((a, b) => (a.username || '').localeCompare(b.username || ''));
+  },
+  async getSubAdminProfile(uid) {
+    const doc = await db.collection('admins').doc(uid).get();
+    return doc.exists ? { uid, ...doc.data() } : null;
+  },
+  async createSubAdminProfile(uid, { username, email, permissions, createdBy }) {
+    const usernameLower = username.toLowerCase();
+    await db.collection('adminLookup').doc(usernameLower).set({ email, uid });
+    await db.collection('admins').doc(uid).set({
+      username, usernameLower, permissions, createdBy,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      active: true
+    });
+  },
+  async deleteSubAdminProfile(uid, usernameLower) {
+    await db.collection('admins').doc(uid).delete();
+    if (usernameLower) await db.collection('adminLookup').doc(usernameLower).delete();
+  }
+};
+
+// =====================================================================
 // BACKGROUND TAMPILAN PUBLIK -- 25 palet warna/gradasi siap pakai yang
 // ditampilkan sebagai pilihan di tab Setting (admin) saat admin TIDAK
 // mengunggah gambar wallpaper sendiri. "value" adalah nilai CSS valid

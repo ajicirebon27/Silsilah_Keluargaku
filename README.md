@@ -1,5 +1,47 @@
 # Silsilah Keluarga — Panduan Setup
 
+> **Baru di versi ini (v19) -- Kelola Admin &amp; Hak Akses (multi-admin):**
+> Sebelumnya aplikasi ini SENGAJA dikunci hanya untuk 1 admin (lihat catatan
+> "celah admin ganda" di v5). Sekarang admin utama bisa membuat admin
+> **tambahan** dengan hak akses menu terbatas, lewat panel baru **Setting >
+> Kelola Admin &amp; Hak Akses**:
+> - Isi **Username**, **Kata Sandi** (diketik 2 kali -- sistem otomatis
+>   mengecek kecocokannya sebelum bisa disimpan), lalu centang **menu/tab**
+>   mana saja yang boleh dibuka admin ini (Dashboard, Data Orang, Laporan,
+>   Komentar, Pohon Keluarga, Jelajah, Sampah, dan/atau Setting).
+> - Setelah disimpan, admin baru itu bisa login sendiri di layar Masuk Admin
+>   pakai username & kata sandi yang tadi dibuatkan -- menu yang tidak
+>   dicentang tidak akan muncul sama sekali di navigasi mereka.
+> - Panel "Kelola Admin" ini (dan kemampuan membuat/mencabut admin lain)
+>   HANYA terlihat oleh admin utama (akun pendaftar pertama) -- admin
+>   tambahan tidak bisa membuat admin baru lagi, walaupun tab Setting
+>   tercentang untuk mereka.
+> - Tombol **"Cabut Akses"** di daftar admin tambahan langsung mematikan
+>   semua akses admin tersebut (dia akan otomatis ditolak & dikeluarkan
+>   begitu mencoba login lagi). Catatan teknis: ini TIDAK menghapus akun
+>   login (Firebase Authentication) yang bersangkutan secara fisik --
+>   itu perlu Admin SDK di server yang tidak dipakai aplikasi front-end
+>   murni seperti ini -- tapi secara praktis akun itu jadi tidak berdaya
+>   sama sekali (tidak lolos Firestore Rules, tidak dapat menu apa pun).
+> - **Batasan penting yang perlu dipahami:** checklist menu ini adalah
+>   pembatasan di sisi **tampilan aplikasi** (menu yang tidak dicentang
+>   memang disembunyikan total dari admin tersebut). Di sisi **Firestore
+>   Rules** (lapisan keamanan sesungguhnya), semua admin -- utama maupun
+>   tambahan, apa pun menu yang dicentang -- sama-sama dianggap "admin sah"
+>   yang boleh menulis ke data keluarga (people/marriages/comments/
+>   settings). Rules TIDAK memvalidasi menu per-checklist secara terpisah,
+>   karena beberapa menu memakai data/collection yang sama (mis. tab **Data
+>   Orang**, **Pohon Keluarga**, dan **Jelajah** sama-sama membaca/menulis
+>   koleksi `people`). Jadi checklist ini paling cocok untuk mengatur
+>   **kerapian & pembagian tugas** antar admin keluarga yang saling
+>   dipercaya (mis. satu orang fokus input data, satu lagi fokus balas
+>   komentar) -- bukan sebagai proteksi terhadap admin yang sengaja
+>   berniat jahat.
+> - **⚠️ WAJIB publish ulang Firestore Rules** (lihat bagian Rules di
+>   bawah) supaya admin tambahan benar-benar bisa login & menyimpan data --
+>   tanpa ini, akun admin tambahan akan berhasil dibuat tapi ditolak setiap
+>   kali mencoba menulis data.
+
 > **Baru di versi ini (v18) -- Unduh Pohon Keluarga sebagai JPG/PDF diperbaiki & dilengkapi:**
 > Sebelumnya tombol Unduh JPG/PDF (admin) sudah ada tapi punya beberapa
 > celah: kalau ada cabang yang sedang diciutkan, hasil unduhan cuma
@@ -238,26 +280,43 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Hanya UID yang tercatat di settings/admin yang dianggap admin sah.
-    // Ini mencegah orang lain membuat akun Firebase Auth sendiri lalu
-    // ikut-ikutan menulis data -- walaupun mereka berhasil login, UID
-    // mereka tidak akan pernah cocok dengan yang tercatat di sini.
-    function isAdmin() {
+    // Admin UTAMA: satu-satunya UID yang tercatat di settings/admin (akun
+    // pendaftar pertama). Ini mencegah orang lain membuat akun Firebase Auth
+    // sendiri lalu ikut-ikutan menulis data -- walaupun mereka berhasil
+    // login, UID mereka tidak akan pernah cocok dengan yang tercatat di sini.
+    function isPrimaryAdmin() {
       return request.auth != null &&
         exists(/databases/$(database)/documents/settings/admin) &&
         get(/databases/$(database)/documents/settings/admin).data.uid == request.auth.uid;
     }
 
+    // Admin TAMBAHAN (v19): dibuat admin utama lewat panel "Kelola Admin &
+    // Hak Akses", tercatat di koleksi admins/{uid}, dan harus masih aktif
+    // (belum dicabut lewat tombol "Cabut Akses").
+    function isSubAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true;
+    }
+
+    // Dipakai di semua koleksi data keluarga: admin utama ATAU admin
+    // tambahan mana pun (yang masih aktif) boleh menulis. Pembatasan menu
+    // per-checklist admin tambahan HANYA diterapkan di sisi tampilan
+    // aplikasi, bukan di lapisan Rules ini -- lihat catatan v19 di atas.
+    function isAnyAdmin() {
+      return isPrimaryAdmin() || isSubAdmin();
+    }
+
     match /people/{doc} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAnyAdmin();
     }
     match /marriages/{doc} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAnyAdmin();
     }
     match /comments/{doc} {
-      allow read: if isAdmin();
+      allow read: if isAnyAdmin();
       // Validasi batas panjang di server -- ini lapis pertahanan paling kuat
       // terhadap spam/komentar raksasa, karena berlaku walau seseorang mem-bypass
       // form (misal kirim langsung lewat console browser).
@@ -268,11 +327,11 @@ service cloud.firestore {
         request.resource.data.isiKomentar.size() > 0 &&
         request.resource.data.isiKomentar.size() <= 1000 &&
         request.resource.data.sudahDibaca == false;
-      allow update, delete: if isAdmin();
+      allow update, delete: if isAnyAdmin();
     }
     match /settings/app {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAnyAdmin();
     }
     match /settings/admin {
       allow read: if true;
@@ -281,7 +340,33 @@ service cloud.firestore {
       allow create: if request.auth != null &&
         !exists(/databases/$(database)/documents/settings/admin) &&
         request.resource.data.uid == request.auth.uid;
-      allow update: if isAdmin();
+      // Hanya admin UTAMA yang boleh mengubah dokumen ini (mis. ganti kata
+      // sandi sendiri lewat updatePassword tidak menyentuh dokumen ini sama
+      // sekali, jadi rule ini di praktiknya jarang terpakai selain saat daftar).
+      allow update: if isPrimaryAdmin();
+    }
+
+    // Profil admin TAMBAHAN (v19) -- doc id = UID Firebase Auth admin
+    // tersebut. Hanya admin utama yang boleh membuat/mengubah/menghapus
+    // (mis. mengatur ulang checklist menu, atau mencabut akses lewat tombol
+    // "Cabut Akses"). Admin tambahan boleh membaca profilnya SENDIRI saja
+    // (dipakai aplikasi utk tahu menu apa yang boleh ditampilkan saat dia
+    // login) -- tidak boleh mengubah apa pun di sini, termasuk menaikkan
+    // hak aksesnya sendiri.
+    match /admins/{uid} {
+      allow read: if isPrimaryAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow write: if isPrimaryAdmin();
+    }
+
+    // Pemetaan username -> email (v19), dipakai SEBELUM login: form "Masuk
+    // Admin" menerima ketikan "username" biasa, lalu sistem perlu tahu email
+    // asli di baliknya sebelum bisa memanggil Firebase Auth. Makanya read
+    // dibuka publik (isinya cuma email + uid, bukan data pribadi/hak akses).
+    // Hanya admin utama yang boleh menulis koleksi ini (dibuat otomatis oleh
+    // aplikasi saat admin utama membuat admin baru lewat panel Kelola Admin).
+    match /adminLookup/{usernameLower} {
+      allow read: if true;
+      allow write: if isPrimaryAdmin();
     }
   }
 }
@@ -294,6 +379,11 @@ service cloud.firestore {
 > UID akun kamu, lalu tempel manual ke field `uid` di dokumen `settings/admin`
 > pada Firestore Console). Kalau field itu kosong, admin lama tidak akan bisa
 > menulis data sampai field ini diisi.
+
+> ⚠️ **Kalau kamu mau memakai fitur "Kelola Admin & Hak Akses" (v19)**, rules
+> di atas **wajib** dipublish ulang -- tanpa fungsi `isSubAdmin()` dan aturan
+> koleksi `admins`/`adminLookup` di atas, admin tambahan yang kamu buat akan
+> berhasil tersimpan tapi selalu ditolak saat mencoba login/menyimpan data.
 
 > ⚠️ **Kalau kamu sudah pernah publish rules versi sebelum v6** (belum ada
 > batas ukuran di bagian `comments` di atas): setelah update ke rules baru ini
@@ -358,7 +448,16 @@ Setelah selesai, kamu akan punya **1 link tetap** (misal `https://silsilah-kelua
 1. Buka link aplikasi, klik **Admin** di pojok kanan atas.
 2. Karena belum ada admin terdaftar, akan muncul form **"Daftar sebagai Admin"**.
 3. Isi email & kata sandi (bebas, minimal 6 karakter), klik **Daftar & Masuk**.
-4. Setelah ini, slot admin terkunci — tidak ada yang bisa daftar jadi admin ke-2. Login berikutnya akan otomatis muncul form **"Masuk Admin"**.
+4. Setelah ini, slot pendaftaran admin **utama** terkunci — tidak ada yang bisa mendaftar sendiri jadi admin ke-2 lewat form ini. Login berikutnya akan otomatis muncul form **"Masuk Admin"**.
+5. Admin ke-2 dan seterusnya **hanya bisa dibuat oleh admin utama**, lewat panel **Setting > Kelola Admin & Hak Akses** (lihat bagian berikutnya) — bukan lewat form daftar di atas.
+
+### Menambah admin baru dengan hak akses terbatas (Kelola Admin)
+1. Login sebagai admin utama, buka tab **Setting**, buka grup **Kelola Admin & Hak Akses**.
+2. Klik **+ Tambah Admin Baru**.
+3. Isi **Username** bebas (tanpa spasi), **Kata Sandi** (min. 6 karakter), dan **Konfirmasi Kata Sandi** yang sama persis — akan muncul tanda ✓ kalau sudah cocok.
+4. Centang menu/tab mana saja yang boleh dibuka admin ini, lalu klik **Simpan**.
+5. Admin baru bisa langsung login di layar **Masuk Admin** pakai username & kata sandi yang barusan dibuat — menu yang tidak dicentang tidak akan tampil di navigasi mereka.
+6. Untuk mencabut akses admin tambahan kapan saja, klik **Cabut Akses** di daftar admin pada panel yang sama.
 
 ### Menambah data orang
 1. Di dashboard admin, tab **Data Orang**, klik **+ Tambah Orang**.

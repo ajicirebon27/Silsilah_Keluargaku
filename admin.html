@@ -279,6 +279,58 @@
           </div>
         </details>
 
+        <!-- GRUP: KELOLA ADMIN & HAK AKSES (hanya tampil utk admin utama) -->
+        <details class="setting-group" id="setting-group-kelola-admin">
+          <summary class="setting-group-header">
+            <span class="setting-group-icon" aria-hidden="true">👥</span>
+            <div>
+              <h3>Kelola Admin &amp; Hak Akses</h3>
+              <p class="setting-group-desc">Tambah admin baru dan atur menu apa saja yang boleh diakses masing-masing.</p>
+            </div>
+            <span class="setting-group-chevron" aria-hidden="true">▾</span>
+          </summary>
+          <div class="setting-group-body">
+
+            <div class="setting-field">
+              <label>Daftar Admin Tambahan</label>
+              <p class="setting-hint">Admin utama (kamu) selalu punya akses penuh ke semua menu dan tidak tampil di daftar ini.</p>
+              <table class="admin-table">
+                <thead><tr><th>Username</th><th>Menu yang Diizinkan</th><th>Aksi</th></tr></thead>
+                <tbody id="admin-list-body"><tr><td colspan="3" class="empty-row-sm">Memuat...</td></tr></tbody>
+              </table>
+            </div>
+
+            <div class="setting-field">
+              <button type="button" id="btn-show-add-admin-form" class="btn-primary">+ Tambah Admin Baru</button>
+
+              <div id="add-admin-form-wrap" style="display:none; margin-top:16px;">
+                <form id="add-admin-form">
+                  <label>Username</label>
+                  <input type="text" id="newadmin-username" placeholder="mis. budi_admin" required minlength="3">
+
+                  <label>Kata Sandi</label>
+                  <input type="password" id="newadmin-pass" placeholder="Minimal 6 karakter" required minlength="6">
+
+                  <label>Konfirmasi Kata Sandi</label>
+                  <input type="password" id="newadmin-pass-confirm" placeholder="Ketik ulang kata sandi yang sama" required minlength="6">
+                  <p id="newadmin-pass-match-hint" class="newadmin-pass-match"></p>
+
+                  <label>Menu yang Boleh Diakses</label>
+                  <p class="setting-hint">Centang menu yang boleh dibuka &amp; dikelola admin ini. Menu yang tidak dicentang tidak akan muncul sama sekali saat admin ini login.</p>
+                  <div id="newadmin-tab-checklist" class="admin-perm-grid"></div>
+
+                  <div class="form-actions" style="margin-top:14px;">
+                    <button type="submit" class="btn-primary">Simpan</button>
+                    <button type="button" id="btn-cancel-add-admin" class="btn-secondary">Batal</button>
+                  </div>
+                  <p id="newadmin-feedback" class="comment-feedback"></p>
+                </form>
+              </div>
+            </div>
+
+          </div>
+        </details>
+
       </div>
     </section>
 
