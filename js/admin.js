@@ -16,6 +16,26 @@ let currentRelasiFilter = 'all'; // 'all' | 'sudah' | 'belum'
 const authScreen = document.getElementById('auth-screen');
 const adminApp = document.getElementById('admin-app');
 
+// ---------- PEMETAAN USERNAME -> EMAIL ----------
+// Firebase Authentication (metode email/password) mengharuskan akun
+// tersimpan dengan format email asli di baliknya -- tidak bisa diganti
+// jadi username polos di sisi server. Supaya pengguna tetap bisa login
+// cukup dengan mengetik "ajipranomo" (tanpa @, titik, dll), kita simpan
+// pemetaan username -> email asli di sini, lalu diterjemahkan otomatis
+// sebelum dikirim ke Firebase.
+const USERNAME_TO_EMAIL = {
+  'ajipranomo': 'ajidigitalcirebon@gmail.com'
+};
+
+function resolveLoginEmail(input) {
+  const trimmed = input.trim();
+  // Kalau yang diketik sudah berbentuk email (mengandung @), pakai apa adanya
+  // -- supaya tetap fleksibel kalau suatu saat mau login pakai email asli juga.
+  if (trimmed.includes('@')) return trimmed;
+  const mapped = USERNAME_TO_EMAIL[trimmed.toLowerCase()];
+  return mapped || trimmed;
+}
+
 // ---------- AUTH ----------
 auth.onAuthStateChanged(async user => {
   if (user) {
@@ -36,10 +56,14 @@ async function setupAuthForm() {
   const submitBtn = document.getElementById('auth-submit');
   const forgotBtn = document.getElementById('auth-forgot-btn');
 
+  const emailInput = document.getElementById('auth-email');
+
   if (isRegistered) {
     title.textContent = 'Masuk Admin';
     subtitle.textContent = 'Masuk untuk mengelola data silsilah keluarga.';
     submitBtn.textContent = 'Masuk';
+    emailInput.type = 'text';
+    emailInput.placeholder = 'Username';
     // v14: link "Lupa kata sandi?" -- sebelumnya satu-satunya cara reset
     // password admin adalah lewat Firebase Console secara manual (perlu paham
     // Firebase), yang jadi titik gagal serius untuk pengguna awam. Firebase
@@ -50,6 +74,8 @@ async function setupAuthForm() {
     subtitle.textContent = 'Belum ada admin terdaftar. Daftar sekali di sini — setelah ini, tidak bisa ada admin lain.';
     submitBtn.textContent = 'Daftar & Masuk';
     forgotBtn.style.display = 'none';
+    emailInput.type = 'email';
+    emailInput.placeholder = 'Email';
   }
 
   forgotBtn.onclick = async () => {
@@ -57,11 +83,12 @@ async function setupAuthForm() {
     const infoEl = document.getElementById('auth-info');
     errorEl.textContent = '';
     infoEl.textContent = '';
-    const email = document.getElementById('auth-email').value.trim();
-    if (!email) {
-      errorEl.textContent = 'Isi dulu kolom Email di atas, lalu klik "Lupa kata sandi?" lagi.';
+    const rawInput = document.getElementById('auth-email').value.trim();
+    if (!rawInput) {
+      errorEl.textContent = 'Isi dulu kolom Username di atas, lalu klik "Lupa kata sandi?" lagi.';
       return;
     }
+    const email = resolveLoginEmail(rawInput);
     try {
       await auth.sendPasswordResetEmail(email);
       infoEl.textContent = `Link reset kata sandi sudah dikirim ke ${email}. Cek juga folder Spam/Promosi kalau tidak terlihat di kotak masuk.`;
@@ -73,7 +100,7 @@ async function setupAuthForm() {
   const form = document.getElementById('auth-form');
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const email = document.getElementById('auth-email').value.trim();
+    const rawInput = document.getElementById('auth-email').value.trim();
     const password = document.getElementById('auth-password').value;
     const errorEl = document.getElementById('auth-error');
     errorEl.textContent = '';
@@ -81,6 +108,7 @@ async function setupAuthForm() {
 
     try {
       if (isRegistered) {
+        const email = resolveLoginEmail(rawInput);
         await auth.signInWithEmailAndPassword(email, password);
       } else {
         const stillNotRegistered = !(await SettingsAPI.isAdminRegistered());
@@ -88,7 +116,7 @@ async function setupAuthForm() {
           errorEl.textContent = 'Admin sudah terdaftar. Silakan masuk.';
           return;
         }
-        await auth.createUserWithEmailAndPassword(email, password);
+        await auth.createUserWithEmailAndPassword(rawInput, password);
         try {
           await SettingsAPI.markAdminRegistered(auth.currentUser.uid);
         } catch (settingErr) {
