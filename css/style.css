@@ -630,6 +630,28 @@ form label { font-size: 13px; font-weight: 500; color: var(--text-muted); displa
 
 .foto-preview-mini { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; margin-bottom: 12px; display: block; }
 
+/* ---------- Notifikasi mode "Situs Desktop" aktif di HP ---------- */
+.desktop-mode-notice {
+  position: fixed;
+  left: 12px; right: 12px; bottom: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+  z-index: 300;
+  background: var(--text-main);
+  color: #fff;
+  border-radius: 10px;
+  padding: 12px 38px 12px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+.desktop-mode-notice strong { color: #FFD873; }
+.desktop-mode-notice-close {
+  position: absolute; top: 4px; right: 6px;
+  background: none; border: none; font-size: 20px; line-height: 1;
+  color: #fff; cursor: pointer; padding: 6px 10px;
+}
+
 /* ---------- Setting: Background tampilan publik ---------- */
 .bg-sub-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin: 0 0 6px; }
 .bg-current-preview {

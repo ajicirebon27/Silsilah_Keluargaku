@@ -24,6 +24,72 @@ function escapeHtml(str) {
   })[c]);
 }
 
+// =====================================================================
+// NOTIFIKASI "MODE SITUS DESKTOP" DI HP -- PENTING DIBACA:
+// Tidak ada satupun kode website (HTML/CSS/JS) yang bisa MEMATIKAN toggle
+// "Situs Desktop"/"Request Desktop Site" di browser HP secara otomatis.
+// Itu sengaja dikunci di level browser -- sepenuhnya kendali pengguna,
+// bukan website, demi keamanan & supaya pengguna yang punya kendali penuh
+// (kalau website bisa mematikannya sendiri, toggle itu jadi tidak berguna).
+// Yang REALISTIS bisa dilakukan cuma: mendeteksi kemungkinan besar toggle
+// itu sedang aktif, lalu menampilkan pesan singkat yang mengarahkan
+// pengguna mematikannya sendiri lewat menu browser.
+//
+// Deteksinya TIDAK memakai lebar viewport atau User-Agent -- dua hal itu
+// justru sengaja "dipalsukan" oleh mode Situs Desktop (viewport dibuat
+// lebar meniru layar besar, User-Agent kadang ikut diubah jadi versi
+// desktop). Sinyal yang dipakai di sini justru yang TIDAK ikut berubah:
+// kemampuan sentuh perangkat (navigator.maxTouchPoints / CSS pointer:coarse)
+// dan resolusi fisik layar (screen.width/height, bukan window.innerWidth).
+// HP dengan layar kecil TAPI viewport tiba-tiba lebar & bisa disentuh --
+// itu ciri khas mode Situs Desktop sedang aktif.
+// =====================================================================
+function looksLikeForcedDesktopModeOnPhone() {
+  try {
+    const isTouchDevice = (navigator.maxTouchPoints || 0) > 0 ||
+      (window.matchMedia && matchMedia('(pointer: coarse)').matches);
+    const smallPhysicalScreen = Math.min(screen.width, screen.height) > 0 &&
+      Math.min(screen.width, screen.height) <= 480;
+    const wideViewportThanUsual = window.innerWidth > 700;
+    return isTouchDevice && smallPhysicalScreen && wideViewportThanUsual;
+  } catch (e) {
+    return false;
+  }
+}
+
+function initDesktopModeNotice() {
+  if (!looksLikeForcedDesktopModeOnPhone()) return;
+
+  const DISMISS_KEY = 'silsilahDesktopNoticeDismissedUntil';
+  try {
+    const until = Number(localStorage.getItem(DISMISS_KEY) || 0);
+    if (Date.now() < until) return; // baru saja ditutup pengguna, jangan tampilkan lagi dulu
+  } catch (e) { /* localStorage tidak tersedia -- tetap lanjut tampilkan */ }
+
+  const bar = document.createElement('div');
+  bar.className = 'desktop-mode-notice';
+  bar.innerHTML = `
+    <span class="desktop-mode-notice-text">📱 Browser kamu sepertinya memakai mode
+      <strong>"Situs Desktop"</strong>. Supaya tampilan lebih pas di HP, buka menu
+      (⋮ / •••) browser lalu hilangkan centang
+      <strong>"Situs Desktop"</strong> / <strong>"Request Desktop Site"</strong>.</span>
+    <button type="button" class="desktop-mode-notice-close" aria-label="Tutup">&times;</button>
+  `;
+  document.body.appendChild(bar);
+
+  bar.querySelector('.desktop-mode-notice-close').addEventListener('click', () => {
+    bar.remove();
+    try {
+      localStorage.setItem(DISMISS_KEY, String(Date.now() + 7 * 24 * 60 * 60 * 1000)); // jangan tampilkan lagi selama 7 hari
+    } catch (e) { /* abaikan kalau localStorage diblokir */ }
+  });
+}
+
+// Dijalankan segera -- db.js selalu dimuat lewat <script> di bagian bawah
+// <body> (bukan di <head>), jadi document.body sudah pasti ada saat ini
+// dieksekusi, di kedua halaman (publik & admin).
+initDesktopModeNotice();
+
 // Pulihkan field bertipe Timestamp Firestore yang "rusak" jadi objek biasa
 // {seconds, nanoseconds} setelah lewat JSON.stringify/parse (dipakai saat restore backup).
 function restoreTimestampField(value) {
