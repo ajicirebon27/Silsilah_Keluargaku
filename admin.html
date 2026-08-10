@@ -148,45 +148,141 @@
     <!-- TAB: SETTING -->
     <section id="tab-setting" class="tab-panel">
       <h2>Pengaturan Aplikasi</h2>
-      <div class="setting-block">
-        <label>Judul Aplikasi</label>
-        <input type="text" id="setting-title" placeholder="Silsilah Keluarga">
-        <button id="btn-save-title" class="btn-primary">Simpan Judul</button>
+
+      <div class="setting-groups">
+
+        <!-- GRUP: UMUM -->
+        <details class="setting-group" open>
+          <summary class="setting-group-header">
+            <span class="setting-group-icon" aria-hidden="true">⚙️</span>
+            <div>
+              <h3>Umum</h3>
+              <p class="setting-group-desc">Judul aplikasi &amp; cakupan keluarga yang ditampilkan ke publik.</p>
+            </div>
+            <span class="setting-group-chevron" aria-hidden="true">▾</span>
+          </summary>
+          <div class="setting-group-body">
+
+            <div class="setting-field">
+              <label>Judul Aplikasi</label>
+              <div class="setting-field-row">
+                <input type="text" id="setting-title" placeholder="Silsilah Keluarga">
+                <button id="btn-save-title" class="btn-primary">Simpan</button>
+              </div>
+            </div>
+
+            <div class="setting-field">
+              <label>Keluarga Utama untuk Tampilan Publik</label>
+              <p class="setting-hint">Pilih salah satu orang (misal leluhur paling awal) supaya tampilan
+                <strong>publik</strong> -- pohon keluarga, pencarian, Laporan, dan Dashboard -- HANYA
+                menampilkan orang ini beserta pasangan, orang tua/leluhurnya, dan seluruh keturunannya.
+                Keluarga lain yang sama sekali tidak berkerabat akan disembunyikan total dari tampilan publik
+                (data mereka tetap aman di database, tidak terhapus, dan tetap terlihat lengkap di sini
+                pada tampilan admin). Kosongkan pilihan untuk menampilkan semua keluarga seperti biasa.</p>
+              <div id="setting-root-person-select"></div>
+              <button id="btn-save-root-person" class="btn-primary">Simpan Keluarga Utama</button>
+            </div>
+
+          </div>
+        </details>
+
+        <!-- GRUP: TAMPILAN PUBLIK / BACKGROUND -->
+        <details class="setting-group">
+          <summary class="setting-group-header">
+            <span class="setting-group-icon" aria-hidden="true">🖼️</span>
+            <div>
+              <h3>Background Tampilan Publik</h3>
+              <p class="setting-group-desc">Wallpaper di belakang Pohon Keluarga/Jelajah: unggah gambar sendiri, atau pilih dari 25 palet warna.</p>
+            </div>
+            <span class="setting-group-chevron" aria-hidden="true">▾</span>
+          </summary>
+          <div class="setting-group-body">
+
+            <div id="bg-current-preview" class="bg-current-preview"></div>
+
+            <div class="setting-field">
+              <label class="bg-sub-label">Unggah Gambar (JPG/JPEG/PNG)</label>
+              <input type="file" id="bg-image-input" accept="image/jpeg,image/jpg,image/png" style="display:none">
+              <div class="bg-upload-row">
+                <button type="button" id="btn-bg-upload" class="btn-secondary">Pilih &amp; Gunakan Gambar</button>
+                <button type="button" id="btn-bg-remove-image" class="btn-danger" style="display:none">Hapus Gambar</button>
+              </div>
+              <p class="setting-hint">Gambar akan otomatis dikompres. Disarankan pakai gambar yang tidak terlalu berat supaya tampilan publik tetap cepat dimuat.</p>
+            </div>
+
+            <div class="setting-field">
+              <label class="bg-sub-label">Atau Pilih Palet Warna (dipakai kalau tidak ada gambar)</label>
+              <div id="bg-palette-grid" class="bg-palette-grid"></div>
+            </div>
+
+            <div class="setting-field">
+              <button type="button" id="btn-bg-reset-default" class="btn-link">Kembalikan ke Tampilan Bawaan (Default)</button>
+              <p id="bg-feedback" class="comment-feedback"></p>
+            </div>
+
+          </div>
+        </details>
+
+        <!-- GRUP: KEAMANAN -->
+        <details class="setting-group">
+          <summary class="setting-group-header">
+            <span class="setting-group-icon" aria-hidden="true">🔒</span>
+            <div>
+              <h3>Keamanan Akun</h3>
+              <p class="setting-group-desc">Ubah kata sandi untuk masuk sebagai admin.</p>
+            </div>
+            <span class="setting-group-chevron" aria-hidden="true">▾</span>
+          </summary>
+          <div class="setting-group-body">
+
+            <div class="setting-field">
+              <label>Kata Sandi Baru</label>
+              <div class="setting-field-row">
+                <input type="password" id="setting-newpass" placeholder="Kata sandi baru (min. 6 karakter)" minlength="6">
+                <button id="btn-change-pass" class="btn-primary">Ubah</button>
+              </div>
+            </div>
+
+          </div>
+        </details>
+
+        <!-- GRUP: BACKUP & RESTORE -->
+        <details class="setting-group">
+          <summary class="setting-group-header">
+            <span class="setting-group-icon" aria-hidden="true">💾</span>
+            <div>
+              <h3>Backup &amp; Restore Data</h3>
+              <p class="setting-group-desc">Unduh cadangan data, atau pulihkan dari file backup.</p>
+            </div>
+            <span class="setting-group-chevron" aria-hidden="true">▾</span>
+          </summary>
+          <div class="setting-group-body">
+
+            <div class="setting-field">
+              <label>Backup Data</label>
+              <p class="setting-hint">Unduh seluruh data (orang, pernikahan, komentar, judul aplikasi, dan pengaturan Keluarga Utama) sebagai file cadangan.</p>
+              <p class="setting-warning">⚠️ File ini berisi data pribadi lengkap keluarga (nama, tanggal lahir, alamat,
+                nomor HP, foto). <strong>Jangan bagikan file ini ke grup WhatsApp/publik</strong> --
+                simpan hanya di penyimpanan pribadi kamu (mis. Google Drive milik sendiri, bukan folder bersama).</p>
+              <button id="btn-export" class="btn-secondary">Export Data (JSON)</button>
+            </div>
+
+            <div class="setting-field">
+              <label>Restore / Import Data</label>
+              <p class="setting-hint">Pulihkan data dari file backup JSON yang pernah diunduh. Data dengan ID yang sama akan <strong>ditimpa</strong>; data yang belum ada akan ditambahkan. Proses ini tidak bisa dibatalkan.</p>
+              <input type="file" id="import-file-input" accept="application/json" style="display:none">
+              <button id="btn-import" class="btn-secondary">Import Data (JSON)</button>
+            </div>
+
+            <p id="setting-feedback" class="comment-feedback"></p>
+          </div>
+        </details>
+
       </div>
-      <div class="setting-block">
-        <label>Keluarga Utama untuk Tampilan Publik</label>
-        <p class="setting-hint">Pilih salah satu orang (misal leluhur paling awal) supaya tampilan
-          <strong>publik</strong> -- pohon keluarga, pencarian, Laporan, dan Dashboard -- HANYA
-          menampilkan orang ini beserta pasangan, orang tua/leluhurnya, dan seluruh keturunannya.
-          Keluarga lain yang sama sekali tidak berkerabat akan disembunyikan total dari tampilan publik
-          (data mereka tetap aman di database, tidak terhapus, dan tetap terlihat lengkap di sini
-          pada tampilan admin). Kosongkan pilihan untuk menampilkan semua keluarga seperti biasa.</p>
-        <div id="setting-root-person-select"></div>
-        <button id="btn-save-root-person" class="btn-primary">Simpan Keluarga Utama</button>
-      </div>
-      <div class="setting-block">
-        <label>Ganti Kata Sandi Admin</label>
-        <input type="password" id="setting-newpass" placeholder="Kata sandi baru (min. 6 karakter)" minlength="6">
-        <button id="btn-change-pass" class="btn-primary">Ubah Kata Sandi</button>
-      </div>
-      <div class="setting-block">
-        <label>Backup Data</label>
-        <p class="setting-hint">Unduh seluruh data (orang, pernikahan, komentar, judul aplikasi, dan pengaturan Keluarga Utama) sebagai file cadangan.</p>
-        <p class="setting-warning">⚠️ File ini berisi data pribadi lengkap keluarga (nama, tanggal lahir, alamat,
-          nomor HP, foto). <strong>Jangan bagikan file ini ke grup WhatsApp/publik</strong> --
-          simpan hanya di penyimpanan pribadi kamu (mis. Google Drive milik sendiri, bukan folder bersama).</p>
-        <button id="btn-export" class="btn-secondary">Export Data (JSON)</button>
-      </div>
-      <div class="setting-block">
-        <label>Restore / Import Data</label>
-        <p class="setting-hint">Pulihkan data dari file backup JSON yang pernah diunduh. Data dengan ID yang sama akan <strong>ditimpa</strong>; data yang belum ada akan ditambahkan. Proses ini tidak bisa dibatalkan.</p>
-        <input type="file" id="import-file-input" accept="application/json" style="display:none">
-        <button id="btn-import" class="btn-secondary">Import Data (JSON)</button>
-      </div>
-      <p id="setting-feedback" class="comment-feedback"></p>
     </section>
 
   </main>
+
 </div>
 
 <!-- ================= FORM TAMBAH/EDIT ORANG (Tab 1 -- biodata saja) ================= -->

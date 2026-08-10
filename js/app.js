@@ -11,11 +11,30 @@ let appSettings = {};
 const treeContainer = document.getElementById('tree-container');
 const treeWrapper = document.getElementById('tree-wrapper');
 
+// Terapkan background/wallpaper kustom (diatur admin lewat tab Setting) di
+// belakang tampilan publik. Kalau admin unggah gambar, itu yang dipakai;
+// kalau tidak, dipakai warna/gradasi dari palet; kalau belum diatur sama
+// sekali, tampilan bawaan (CSS var(--bg)) dibiarkan seperti biasa.
+function applyPublicBackground(settings) {
+  const type = settings && settings.backgroundType;
+  if (type === 'image' && settings.backgroundImage) {
+    document.body.style.background = 'none';
+    document.body.style.backgroundImage = `url(${settings.backgroundImage})`;
+    document.body.classList.add('public-custom-bg');
+  } else if (type === 'color' && settings.backgroundColor) {
+    document.body.style.backgroundImage = 'none';
+    document.body.style.background = settings.backgroundColor;
+    document.body.classList.add('public-custom-bg');
+  }
+  // Kalau 'default'/belum diatur: tidak melakukan apa-apa, biarkan CSS bawaan.
+}
+
 async function init() {
   try {
     appSettings = await SettingsAPI.getAppSettings();
     document.getElementById('app-title').textContent = appSettings.judulAplikasi || 'Silsilah Keluarga';
     document.title = appSettings.judulAplikasi || 'Silsilah Keluarga';
+    applyPublicBackground(appSettings);
   } catch (e) { appSettings = {}; /* pakai judul default jika gagal */ }
 
   await loadData();

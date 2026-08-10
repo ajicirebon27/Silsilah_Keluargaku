@@ -6,7 +6,10 @@
 //   marriages   : { orangId1, orangId2 (bisa null = orang tua tunggal belum diketahui),
 //                   urutanPasangan, childIds: [], createdAt }
 //   comments    : { orangId, namaPengirim, isiKomentar, sudahDibaca, waktuKirim }
-//   settings/app: { judulAplikasi }
+//   settings/app: { judulAplikasi, rootPersonId,
+//                    backgroundType: 'default' | 'image' | 'color',
+//                    backgroundImage (base64, hanya jika backgroundType='image'),
+//                    backgroundColor (hex/gradient CSS, hanya jika backgroundType='color') }
 //   settings/admin: { exists: true }
 // =====================================================================
 
@@ -245,6 +248,40 @@ const SettingsAPI = {
     await db.collection('settings').doc('admin').set({ exists: true, uid });
   }
 };
+
+// =====================================================================
+// BACKGROUND TAMPILAN PUBLIK -- 25 palet warna/gradasi siap pakai yang
+// ditampilkan sebagai pilihan di tab Setting (admin) saat admin TIDAK
+// mengunggah gambar wallpaper sendiri. "value" adalah nilai CSS valid
+// untuk properti `background` (boleh warna solid atau linear-gradient).
+// =====================================================================
+const BackgroundPalettes = [
+  { name: 'Putih Bersih',      value: '#FFFFFF' },
+  { name: 'Abu Lembut',        value: '#F2F4F6' },
+  { name: 'Biru Langit',       value: '#E8F1FA' },
+  { name: 'Biru Laut',         value: '#4F7CAC' },
+  { name: 'Biru Navy',         value: '#22334D' },
+  { name: 'Hijau Daun',        value: '#EAF6EE' },
+  { name: 'Hijau Hutan',       value: '#4E8B6C' },
+  { name: 'Hijau Tosca',       value: '#2F6E63' },
+  { name: 'Krem Hangat',       value: '#F5EDE0' },
+  { name: 'Cokelat Kayu',      value: '#6B4F3B' },
+  { name: 'Pasir',             value: '#E4D5B7' },
+  { name: 'Kuning Lembut',     value: '#FDF3D0' },
+  { name: 'Oranye Sunset',     value: '#E8A56C' },
+  { name: 'Merah Bata',        value: '#B5533C' },
+  { name: 'Merah Marun',       value: '#6E2C3B' },
+  { name: 'Pink Lembut',       value: '#F6D9E0' },
+  { name: 'Ungu Lavender',     value: '#D8CCEB' },
+  { name: 'Ungu Tua',          value: '#4B3C63' },
+  { name: 'Abu Biru',          value: '#7D8FA3' },
+  { name: 'Abu Gelap',         value: '#3A3F47' },
+  { name: 'Hitam Elegan',      value: '#1C1F24' },
+  { name: 'Gradasi Biru-Hijau', value: 'linear-gradient(135deg, #4F7CAC, #4E8B6C)' },
+  { name: 'Gradasi Sunset',    value: 'linear-gradient(135deg, #F6D9E0, #E8A56C)' },
+  { name: 'Gradasi Malam',     value: 'linear-gradient(135deg, #22334D, #4B3C63)' },
+  { name: 'Gradasi Pastel',    value: 'linear-gradient(135deg, #E8F1FA, #EAF6EE)' }
+];
 
 // =====================================================================
 // ATURAN SILSILAH -- validasi & bantuan relasi keluarga
@@ -834,6 +871,58 @@ function compressImageToBase64(file, maxDim = 300, quality = 0.7) {
       img.src = e.target.result;
     };
     reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Kompres gambar background/wallpaper tampilan publik ke base64. Beda dari
+// compressImageToBase64 (foto orang, kotak kecil 300px) -- wallpaper perlu
+// resolusi lebih besar supaya tidak pecah saat memenuhi layar, jadi dimensi
+// awal jauh lebih besar. Tapi karena disimpan langsung di dokumen Firestore
+// settings/app (bukan Storage), hasil akhirnya tetap harus dijaga di bawah
+// maxSizeBytes -- dicoba turunkan kualitas dulu, baru dimensi, sampai pas.
+function compressBackgroundImageToBase64(file, maxSizeBytes = 700 * 1024) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let dim = 1920;
+        let quality = 0.75;
+
+        const render = () => {
+          let { width, height } = img;
+          if (width > height && width > dim) {
+            height = Math.round(height * (dim / width));
+            width = dim;
+          } else if (height >= width && height > dim) {
+            width = Math.round(width * (dim / height));
+            height = dim;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          return canvas.toDataURL('image/jpeg', quality);
+        };
+
+        let result = render();
+        let attempts = 0;
+        while (result.length > maxSizeBytes && attempts < 8) {
+          if (quality > 0.4) quality -= 0.1; else dim = Math.round(dim * 0.8);
+          result = render();
+          attempts++;
+        }
+        if (result.length > maxSizeBytes) {
+          reject(new Error('Ukuran gambar masih terlalu besar setelah dikompres. Coba gunakan foto lain yang lebih sederhana.'));
+          return;
+        }
+        resolve(result);
+      };
+      img.onerror = () => reject(new Error('Gagal membaca gambar. Pastikan file berformat JPG, JPEG, atau PNG yang valid.'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('Gagal membaca file.'));
     reader.readAsDataURL(file);
   });
 }

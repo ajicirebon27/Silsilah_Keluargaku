@@ -1196,7 +1196,10 @@ function setupSettings() {
     cachedAppSettings = s || {};
     document.getElementById('setting-title').value = cachedAppSettings.judulAplikasi || 'Silsilah Keluarga';
     refreshRootPersonSelectOptions();
+    renderBackgroundPreview();
   });
+
+  setupBackgroundSettings();
 
   document.getElementById('btn-save-title').addEventListener('click', async () => {
     const title = document.getElementById('setting-title').value.trim() || 'Silsilah Keluarga';
@@ -1254,6 +1257,148 @@ function setupSettings() {
   const importInput = document.getElementById('import-file-input');
   document.getElementById('btn-import').addEventListener('click', () => importInput.click());
   importInput.addEventListener('change', handleImportFile);
+}
+
+// ======================================================================
+// SETTINGS -- Background/wallpaper tampilan publik
+// ======================================================================
+
+const MAX_BG_SOURCE_MB = 15; // batas ukuran file ASLI sebelum dikompres
+// Batas ukuran HASIL kompresi (base64) yang disimpan ke field backgroundImage
+// di dokumen settings/app -- sama alasannya dgn MAX_FOTO_BASE64_BYTES: doc
+// Firestore dibatasi ~1MB, jadi 700KB menyisakan margin aman.
+const MAX_BG_BASE64_BYTES = 700 * 1024;
+
+function setupBackgroundSettings() {
+  const grid = document.getElementById('bg-palette-grid');
+  grid.innerHTML = BackgroundPalettes.map((p, i) => `
+    <button type="button" class="bg-palette-swatch" data-idx="${i}" title="${escapeHtml(p.name)}"
+      style="background:${p.value}"></button>
+  `).join('');
+  grid.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.bg-palette-swatch');
+    if (!btn) return;
+    const palette = BackgroundPalettes[Number(btn.dataset.idx)];
+    try {
+      await SettingsAPI.updateAppSettings({
+        backgroundType: 'color',
+        backgroundColor: palette.value,
+        backgroundImage: firebase.firestore.FieldValue.delete()
+      });
+      cachedAppSettings.backgroundType = 'color';
+      cachedAppSettings.backgroundColor = palette.value;
+      delete cachedAppSettings.backgroundImage;
+      renderBackgroundPreview();
+      showBgFeedback(`Background diganti ke warna "${palette.name}".`);
+    } catch (err) {
+      showBgFeedback('Gagal menyimpan warna background: ' + err.message, true);
+    }
+  });
+
+  const fileInput = document.getElementById('bg-image-input');
+  document.getElementById('btn-bg-upload').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', handleBackgroundImageChange);
+
+  document.getElementById('btn-bg-remove-image').addEventListener('click', async () => {
+    if (!confirm('Hapus gambar background ini? Tampilan publik akan kembali memakai warna palet (atau bawaan kalau belum pernah pilih warna).')) return;
+    try {
+      await SettingsAPI.updateAppSettings({
+        backgroundType: cachedAppSettings.backgroundColor ? 'color' : 'default',
+        backgroundImage: firebase.firestore.FieldValue.delete()
+      });
+      cachedAppSettings.backgroundType = cachedAppSettings.backgroundColor ? 'color' : 'default';
+      delete cachedAppSettings.backgroundImage;
+      renderBackgroundPreview();
+      showBgFeedback('Gambar background dihapus.');
+    } catch (err) {
+      showBgFeedback('Gagal menghapus gambar background: ' + err.message, true);
+    }
+  });
+
+  document.getElementById('btn-bg-reset-default').addEventListener('click', async () => {
+    if (!confirm('Kembalikan tampilan publik ke tampilan bawaan (tanpa gambar/warna kustom)?')) return;
+    try {
+      await SettingsAPI.updateAppSettings({
+        backgroundType: 'default',
+        backgroundImage: firebase.firestore.FieldValue.delete(),
+        backgroundColor: firebase.firestore.FieldValue.delete()
+      });
+      cachedAppSettings.backgroundType = 'default';
+      delete cachedAppSettings.backgroundImage;
+      delete cachedAppSettings.backgroundColor;
+      renderBackgroundPreview();
+      showBgFeedback('Background dikembalikan ke tampilan bawaan.');
+    } catch (err) {
+      showBgFeedback('Gagal mengembalikan ke bawaan: ' + err.message, true);
+    }
+  });
+}
+
+async function handleBackgroundImageChange(e) {
+  const file = e.target.files[0];
+  e.target.value = ''; // supaya bisa pilih file yang sama lagi kalau perlu
+  if (!file) return;
+
+  const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+  if (!file.type || !validTypes.includes(file.type)) {
+    showBgFeedback('File harus berformat JPG, JPEG, atau PNG.', true);
+    return;
+  }
+  if (file.size > MAX_BG_SOURCE_MB * 1024 * 1024) {
+    showBgFeedback(`Ukuran file terlalu besar (maks. ${MAX_BG_SOURCE_MB}MB sebelum dikompres). Pilih gambar lain.`, true);
+    return;
+  }
+
+  showBgFeedback('Sedang mengunggah & mengompres gambar, mohon tunggu...');
+  try {
+    const base64 = await compressBackgroundImageToBase64(file, MAX_BG_BASE64_BYTES);
+    await SettingsAPI.updateAppSettings({
+      backgroundType: 'image',
+      backgroundImage: base64,
+      backgroundColor: firebase.firestore.FieldValue.delete()
+    });
+    cachedAppSettings.backgroundType = 'image';
+    cachedAppSettings.backgroundImage = base64;
+    delete cachedAppSettings.backgroundColor;
+    renderBackgroundPreview();
+    showBgFeedback('Gambar background berhasil disimpan & langsung dipakai di tampilan publik.');
+  } catch (err) {
+    showBgFeedback('Gagal mengunggah gambar background: ' + err.message, true);
+  }
+}
+
+function renderBackgroundPreview() {
+  const box = document.getElementById('bg-current-preview');
+  const removeBtn = document.getElementById('btn-bg-remove-image');
+  const type = cachedAppSettings.backgroundType || 'default';
+
+  // Tandai swatch palet yang aktif
+  document.querySelectorAll('.bg-palette-swatch').forEach((btn, i) => {
+    btn.classList.toggle('active', type === 'color' && BackgroundPalettes[i].value === cachedAppSettings.backgroundColor);
+  });
+
+  if (type === 'image' && cachedAppSettings.backgroundImage) {
+    box.style.backgroundImage = `url(${cachedAppSettings.backgroundImage})`;
+    box.innerHTML = '<span>Gambar Kustom Aktif</span>';
+    removeBtn.style.display = 'inline-block';
+  } else if (type === 'color' && cachedAppSettings.backgroundColor) {
+    box.style.backgroundImage = 'none';
+    box.style.background = cachedAppSettings.backgroundColor;
+    const p = BackgroundPalettes.find(p => p.value === cachedAppSettings.backgroundColor);
+    box.innerHTML = `<span>Warna: ${escapeHtml(p ? p.name : 'Kustom')}</span>`;
+    removeBtn.style.display = 'none';
+  } else {
+    box.style.backgroundImage = 'none';
+    box.style.background = 'var(--bg)';
+    box.innerHTML = '<span>Tampilan Bawaan (Default)</span>';
+    removeBtn.style.display = 'none';
+  }
+}
+
+function showBgFeedback(msg, isError = false) {
+  const el = document.getElementById('bg-feedback');
+  el.textContent = msg;
+  el.className = 'comment-feedback ' + (isError ? 'error' : 'success');
 }
 
 // Isi ulang daftar kandidat "Keluarga Utama" di tab Setting supaya selalu
