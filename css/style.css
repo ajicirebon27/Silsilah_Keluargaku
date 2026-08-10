@@ -630,26 +630,6 @@ form label { font-size: 13px; font-weight: 500; color: var(--text-muted); displa
 
 .foto-preview-mini { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; margin-bottom: 12px; display: block; }
 
-/* ---------- Setting: Kelola Admin & Hak Akses ---------- */
-.admin-perm-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 8px 14px;
-  margin-bottom: 4px;
-}
-.admin-perm-checkbox {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 13.5px; color: var(--text-main); cursor: pointer;
-}
-.admin-perm-checkbox input { width: auto; margin: 0; }
-.newadmin-pass-match { font-size: 12px; margin: -6px 0 12px; min-height: 15px; }
-.newadmin-pass-match.ok { color: var(--green-deep); }
-.newadmin-pass-match.bad { color: var(--danger); }
-.perm-chip {
-  display: inline-block; background: var(--blue-pale); color: var(--blue-deep);
-  border-radius: 12px; padding: 2px 9px; font-size: 11.5px; margin: 2px 3px 2px 0;
-}
-
 /* ---------- Notifikasi mode "Situs Desktop" aktif di HP ---------- */
 .desktop-mode-notice {
   position: fixed;

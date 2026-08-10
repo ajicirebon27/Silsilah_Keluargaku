@@ -27,96 +27,22 @@ const USERNAME_TO_EMAIL = {
   'ajipranomo': 'ajidigitalcirebon@gmail.com'
 };
 
-async function resolveLoginEmail(input) {
+function resolveLoginEmail(input) {
   const trimmed = input.trim();
   // Kalau yang diketik sudah berbentuk email (mengandung @), pakai apa adanya
   // -- supaya tetap fleksibel kalau suatu saat mau login pakai email asli juga.
   if (trimmed.includes('@')) return trimmed;
-  const lower = trimmed.toLowerCase();
-  const legacyMapped = USERNAME_TO_EMAIL[lower];
-  if (legacyMapped) return legacyMapped;
-  // v16: username admin tambahan (dibuat lewat panel "Kelola Admin") tidak
-  // di-hardcode di sini -- dicari di koleksi 'adminLookup' di Firestore.
-  const fromLookup = await AdminManagementAPI.findEmailByUsername(lower);
-  return fromLookup || trimmed;
-}
-
-// ---------- DAFTAR MENU/TAB (dipakai utk checklist hak akses admin) ----------
-const TAB_DEFINITIONS = [
-  { key: 'tab-dashboard', label: 'Dashboard' },
-  { key: 'tab-orang',     label: 'Data Orang' },
-  { key: 'tab-laporan',   label: 'Laporan' },
-  { key: 'tab-komentar',  label: 'Komentar' },
-  { key: 'tab-pohon',     label: 'Pohon Keluarga' },
-  { key: 'tab-jelajah',   label: 'Jelajah' },
-  { key: 'tab-sampah',    label: 'Sampah' },
-  { key: 'tab-setting',   label: 'Setting' }
-];
-
-// Profil admin yang sedang login: { isPrimary, username?, permissions: [tab-xxx,...] }
-let currentAdminProfile = null;
-
-// Menentukan siapa yang baru login: admin UTAMA (akses penuh, lihat
-// settings/admin.uid -- lihat catatan "celah admin ganda" di README) atau
-// admin TAMBAHAN (dicek di koleksi 'admins', hak aksesnya sesuai checklist
-// yang dipilih admin utama saat membuatnya). Return null kalau akun ini
-// bukan admin sah sama sekali (atau aksesnya sudah dicabut).
-async function resolveAdminProfile(user) {
-  const isRegistered = await SettingsAPI.isAdminRegistered();
-  if (isRegistered) {
-    const adminDoc = await db.collection('settings').doc('admin').get();
-    if (adminDoc.exists && adminDoc.data().uid === user.uid) {
-      return { isPrimary: true, permissions: TAB_DEFINITIONS.map(t => t.key) };
-    }
-  }
-  const sub = await AdminManagementAPI.getSubAdminProfile(user.uid);
-  if (sub && sub.active !== false) {
-    return { isPrimary: false, username: sub.username, permissions: Array.isArray(sub.permissions) ? sub.permissions : [] };
-  }
-  return null;
-}
-
-// Menyembunyikan tombol menu (dan panel "Kelola Admin") yang tidak termasuk
-// hak akses admin yang sedang login. Admin utama selalu lihat semua.
-function applyPermissionsToUI(profile) {
-  document.querySelectorAll('.nav-btn').forEach(btn => {
-    const allowed = profile.isPrimary || profile.permissions.includes(btn.dataset.tab);
-    btn.style.display = allowed ? '' : 'none';
-  });
-  const manageBlock = document.getElementById('setting-group-kelola-admin');
-  if (manageBlock) manageBlock.style.display = profile.isPrimary ? '' : 'none';
-
-  // Kalau tab yang lagi aktif ternyata tidak diizinkan (mis. baru saja
-  // dicabut aksesnya), pindah otomatis ke menu pertama yang masih boleh.
-  const activeBtn = document.querySelector('.nav-btn.active');
-  if (activeBtn && activeBtn.style.display === 'none') {
-    const firstAllowed = Array.from(document.querySelectorAll('.nav-btn')).find(b => b.style.display !== 'none');
-    if (firstAllowed) firstAllowed.click();
-  }
+  const mapped = USERNAME_TO_EMAIL[trimmed.toLowerCase()];
+  return mapped || trimmed;
 }
 
 // ---------- AUTH ----------
 auth.onAuthStateChanged(async user => {
   if (user) {
-    const profile = await resolveAdminProfile(user);
-    if (!profile) {
-      // Bukan admin sah, atau akses admin tambahan ini sudah dicabut lewat
-      // panel "Kelola Admin" -- tolak & keluarkan otomatis.
-      await auth.signOut();
-      currentAdminProfile = null;
-      adminApp.style.display = 'none';
-      authScreen.style.display = 'flex';
-      await setupAuthForm();
-      document.getElementById('auth-error').textContent = 'Akun ini tidak (atau tidak lagi) punya akses admin. Hubungi admin utama.';
-      return;
-    }
-    currentAdminProfile = profile;
     authScreen.style.display = 'none';
     adminApp.style.display = 'block';
     await bootAdmin();
-    applyPermissionsToUI(profile);
   } else {
-    currentAdminProfile = null;
     adminApp.style.display = 'none';
     authScreen.style.display = 'flex';
     await setupAuthForm();
@@ -162,7 +88,7 @@ async function setupAuthForm() {
       errorEl.textContent = 'Isi dulu kolom Username di atas, lalu klik "Lupa kata sandi?" lagi.';
       return;
     }
-    const email = await resolveLoginEmail(rawInput);
+    const email = resolveLoginEmail(rawInput);
     try {
       await auth.sendPasswordResetEmail(email);
       infoEl.textContent = `Link reset kata sandi sudah dikirim ke ${email}. Cek juga folder Spam/Promosi kalau tidak terlihat di kotak masuk.`;
@@ -182,7 +108,7 @@ async function setupAuthForm() {
 
     try {
       if (isRegistered) {
-        const email = await resolveLoginEmail(rawInput);
+        const email = resolveLoginEmail(rawInput);
         await auth.signInWithEmailAndPassword(email, password);
       } else {
         const stillNotRegistered = !(await SettingsAPI.isAdminRegistered());
@@ -1359,185 +1285,6 @@ function setupSettings() {
   const importInput = document.getElementById('import-file-input');
   document.getElementById('btn-import').addEventListener('click', () => importInput.click());
   importInput.addEventListener('change', handleImportFile);
-
-  setupAdminManagementPanel();
-}
-
-// ======================================================================
-// SETTING -- Kelola Admin & Hak Akses (v16)
-// ======================================================================
-
-function setupAdminManagementPanel() {
-  // Panel ini hanya dipakai (dan sudah disembunyikan lewat CSS/display) oleh
-  // admin utama -- lihat applyPermissionsToUI(). Guard di sini cuma jaga-jaga
-  // supaya tidak query/bind listener sia-sia kalau yang login admin tambahan.
-  if (!currentAdminProfile || !currentAdminProfile.isPrimary) return;
-
-  const btnShowForm = document.getElementById('btn-show-add-admin-form');
-  const formWrap = document.getElementById('add-admin-form-wrap');
-  const form = document.getElementById('add-admin-form');
-  const btnCancel = document.getElementById('btn-cancel-add-admin');
-  const usernameInput = document.getElementById('newadmin-username');
-  const passInput = document.getElementById('newadmin-pass');
-  const passConfirmInput = document.getElementById('newadmin-pass-confirm');
-  const passMatchHint = document.getElementById('newadmin-pass-match-hint');
-  const feedbackEl = document.getElementById('newadmin-feedback');
-  const checklistWrap = document.getElementById('newadmin-tab-checklist');
-
-  checklistWrap.innerHTML = TAB_DEFINITIONS.map(t => `
-    <label class="admin-perm-checkbox">
-      <input type="checkbox" value="${t.key}" class="newadmin-tab-cb">
-      <span>${escapeHtml(t.label)}</span>
-    </label>
-  `).join('');
-
-  function resetForm() {
-    form.reset();
-    passMatchHint.textContent = '';
-    passMatchHint.className = 'newadmin-pass-match';
-    feedbackEl.textContent = '';
-    feedbackEl.className = 'comment-feedback';
-  }
-
-  btnShowForm.addEventListener('click', () => {
-    resetForm();
-    formWrap.style.display = 'block';
-    btnShowForm.style.display = 'none';
-    usernameInput.focus();
-  });
-
-  btnCancel.addEventListener('click', () => {
-    resetForm();
-    formWrap.style.display = 'none';
-    btnShowForm.style.display = '';
-  });
-
-  function checkPassMatch() {
-    if (!passConfirmInput.value) {
-      passMatchHint.textContent = '';
-      passMatchHint.className = 'newadmin-pass-match';
-      return true;
-    }
-    const match = passInput.value === passConfirmInput.value;
-    passMatchHint.textContent = match ? 'Kata sandi cocok. ✓' : 'Kata sandi tidak sama dengan konfirmasi.';
-    passMatchHint.className = match ? 'newadmin-pass-match ok' : 'newadmin-pass-match bad';
-    return match;
-  }
-  passInput.addEventListener('input', checkPassMatch);
-  passConfirmInput.addEventListener('input', checkPassMatch);
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    feedbackEl.textContent = '';
-    feedbackEl.className = 'comment-feedback';
-
-    const usernameRaw = usernameInput.value.trim();
-    const pass = passInput.value;
-    const passConfirm = passConfirmInput.value;
-    const selectedTabs = Array.from(checklistWrap.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value);
-
-    if (usernameRaw.length < 3) {
-      feedbackEl.textContent = 'Username minimal 3 karakter.';
-      feedbackEl.classList.add('error');
-      return;
-    }
-    if (!/^[a-zA-Z0-9_.]+$/.test(usernameRaw)) {
-      feedbackEl.textContent = 'Username hanya boleh huruf, angka, titik, dan underscore (tanpa spasi).';
-      feedbackEl.classList.add('error');
-      return;
-    }
-    if (pass.length < 6) {
-      feedbackEl.textContent = 'Kata sandi minimal 6 karakter.';
-      feedbackEl.classList.add('error');
-      return;
-    }
-    if (!checkPassMatch()) {
-      feedbackEl.textContent = 'Kata sandi dan konfirmasi kata sandi tidak sama.';
-      feedbackEl.classList.add('error');
-      return;
-    }
-    if (selectedTabs.length === 0) {
-      feedbackEl.textContent = 'Pilih minimal 1 menu yang boleh diakses admin ini.';
-      feedbackEl.classList.add('error');
-      return;
-    }
-
-    const usernameLower = usernameRaw.toLowerCase();
-    const submitBtn = form.querySelector('button[type=submit]');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Menyimpan...';
-
-    try {
-      const taken = !!USERNAME_TO_EMAIL[usernameLower] || await AdminManagementAPI.isUsernameTaken(usernameLower);
-      if (taken) {
-        feedbackEl.textContent = 'Username ini sudah dipakai, pilih username lain.';
-        feedbackEl.classList.add('error');
-        return;
-      }
-
-      // Firebase Auth wajib format email -- username diterjemahkan ke alamat
-      // internal (bukan email asli, tidak akan pernah dikirimi apapun).
-      const pseudoEmail = `${usernameLower}@admin-silsilah.local`;
-
-      const secondaryAuth = getSecondaryAuth();
-      const cred = await secondaryAuth.createUserWithEmailAndPassword(pseudoEmail, pass);
-      const newUid = cred.user.uid;
-      await secondaryAuth.signOut();
-
-      await AdminManagementAPI.createSubAdminProfile(newUid, {
-        username: usernameRaw,
-        email: pseudoEmail,
-        permissions: selectedTabs,
-        createdBy: auth.currentUser.uid
-      });
-
-      feedbackEl.textContent = `Admin baru "${usernameRaw}" berhasil dibuat.`;
-      feedbackEl.classList.add('success');
-      resetForm();
-      formWrap.style.display = 'none';
-      btnShowForm.style.display = '';
-      renderAdminList();
-    } catch (err) {
-      feedbackEl.textContent = 'Gagal membuat admin: ' + (translateAuthError(err.code) || err.message);
-      feedbackEl.classList.add('error');
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Simpan';
-    }
-  });
-
-  renderAdminList();
-}
-
-async function renderAdminList() {
-  const listEl = document.getElementById('admin-list-body');
-  if (!listEl) return;
-  listEl.innerHTML = `<tr><td colspan="3" class="empty-row-sm">Memuat...</td></tr>`;
-  const subAdmins = await AdminManagementAPI.getAllSubAdmins();
-  if (subAdmins.length === 0) {
-    listEl.innerHTML = `<tr><td colspan="3" class="empty-row-sm">Belum ada admin tambahan.</td></tr>`;
-    return;
-  }
-  listEl.innerHTML = subAdmins.map(a => {
-    const labels = (a.permissions || []).map(key => {
-      const def = TAB_DEFINITIONS.find(t => t.key === key);
-      return def ? def.label : key;
-    });
-    return `
-    <tr>
-      <td>${escapeHtml(a.username || '(tanpa nama)')}</td>
-      <td>${labels.map(l => `<span class="perm-chip">${escapeHtml(l)}</span>`).join(' ') || '-'}</td>
-      <td class="aksi-cell">
-        <button class="btn-aksi btn-aksi-hapus" onclick="deleteSubAdminRow('${a.uid}','${a.usernameLower || ''}')">Cabut Akses</button>
-      </td>
-    </tr>`;
-  }).join('');
-}
-
-async function deleteSubAdminRow(uid, usernameLower) {
-  if (!confirm('Cabut akses admin ini? Admin ini tidak akan bisa masuk/mengelola data lagi setelah ini.')) return;
-  await AdminManagementAPI.deleteSubAdminProfile(uid, usernameLower);
-  renderAdminList();
 }
 
 // ======================================================================
