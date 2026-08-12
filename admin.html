@@ -36,18 +36,55 @@
       <button class="nav-btn" data-tab="tab-komentar">
         Komentar <span id="badge-komentar" class="badge" style="display:none">0</span>
       </button>
-      <button class="nav-btn" data-tab="tab-pohon">Pohon Keluarga</button>
-      <button class="nav-btn" data-tab="tab-jelajah">Jelajah</button>
       <button class="nav-btn" data-tab="tab-sampah">
         Sampah <span id="badge-sampah" class="badge" style="display:none">0</span>
       </button>
       <button class="nav-btn" data-tab="tab-setting">Setting</button>
     </nav>
     <div class="topbar-actions">
+      <button id="btn-notif-ultah" class="admin-link notif-bell-btn" title="Notifikasi Ulang Tahun">
+        🔔<span id="notif-ultah-badge" class="badge notif-bell-badge" style="display:none">0</span>
+      </button>
+      <button id="btn-ganti-tampilan" class="admin-link" title="Ganti tampilan Pohon/Jelajah">Ganti Tampilan</button>
       <a href="index.html" class="admin-link">Lihat Publik</a>
       <button id="logout-btn" class="admin-link">Keluar</button>
     </div>
   </header>
+
+  <!-- Overlay pilihan tampilan Pohon Keluarga / Jelajah (level admin) --
+       sama konsepnya dgn view-chooser pada tampilan publik: dulu ini dua
+       tab terpisah (Pohon Keluarga, Jelajah) di nav admin, sekarang
+       diakses lewat satu tombol "Ganti Tampilan" di topbar supaya menu
+       admin lebih ringkas dan konsisten dgn tampilan publik. -->
+  <div id="admin-view-chooser" class="view-chooser-overlay" style="display:none">
+    <div class="view-chooser-card">
+      <button id="admin-chooser-close" class="chooser-close-btn" title="Tutup" aria-label="Tutup">&times;</button>
+      <h2>Pilih Tampilan Pohon Keluarga</h2>
+      <p class="comment-hint">Pilih cara menampilkan silsilah keluarga di panel admin ini.</p>
+      <div class="view-chooser-options">
+        <button id="admin-choose-tree" class="view-choice-btn">
+          <span class="view-choice-icon">🌳</span>
+          <span class="view-choice-label">Pohon Keluarga</span>
+          <span class="view-choice-desc">Lihat &amp; unduh seluruh silsilah dalam bentuk pohon</span>
+        </button>
+        <button id="admin-choose-jelajah" class="view-choice-btn">
+          <span class="view-choice-icon">🗂️</span>
+          <span class="view-choice-label">Jelajah (Kartu)</span>
+          <span class="view-choice-desc">Telusuri keluarga satu per satu lewat kartu</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Notifikasi Ulang Tahun -->
+  <div id="birthday-modal" class="modal-overlay" style="display:none">
+    <div class="modal-card modal-wide">
+      <button class="modal-close" id="birthday-modal-close">&times;</button>
+      <h2>🎂 Notifikasi Ulang Tahun</h2>
+      <p class="setting-hint">Anggota keluarga yang berulang tahun hari ini. Klik nama untuk membuka datanya.</p>
+      <ul id="birthday-list" class="dashboard-detail-list"></ul>
+    </div>
+  </div>
 
   <main class="admin-main">
 
@@ -419,6 +456,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="js/firebase-config.js"></script>
 <script src="js/db.js"></script>
+<script src="js/birthday.js"></script>
 <script src="js/tree.js"></script>
 <script src="js/searchable-select.js"></script>
 <script src="js/admin.js"></script>

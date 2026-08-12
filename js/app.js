@@ -46,6 +46,7 @@ async function init() {
   setupJelajahModal();
   setupSubKeluargaReset();
   setupViewChooser();
+  setupBirthdayModal();
 
   updateLayoutOffsets();
   window.addEventListener('resize', debouncedUpdateLayoutOffsets);
@@ -111,6 +112,8 @@ async function loadData() {
   }
   allPeople = people;
   allMarriages = marriages;
+
+  refreshBirthdayNotif();
 
   if (allPeople.length === 0) {
     document.getElementById('empty-state').style.display = 'flex';
@@ -455,6 +458,62 @@ function formatDate(d) {
 function closeDetail() {
   document.getElementById('detail-modal').style.display = 'none';
   currentPersonId = null;
+}
+
+// ---------- Notifikasi Ulang Tahun ----------
+// Lonceng di topbar publik: menyala (badge + animasi) kalau ada anggota
+// keluarga yang berulang tahun hari ini. Diklik -> tampil daftar nama, dan
+// tiap nama bisa diklik lagi utk membuka detail biodatanya (modal yang sama
+// dgn openDetail() yang sudah ada).
+let birthdayTodayList = [];
+
+function setupBirthdayModal() {
+  document.getElementById('btn-notif-ultah').addEventListener('click', openBirthdayModal);
+  document.getElementById('birthday-modal-close').addEventListener('click', closeBirthdayModal);
+  document.getElementById('birthday-modal').addEventListener('click', e => {
+    if (e.target.id === 'birthday-modal') closeBirthdayModal();
+  });
+}
+
+// Dipanggil ulang tiap loadData() supaya badge selalu sesuai data terbaru.
+function refreshBirthdayNotif() {
+  birthdayTodayList = BirthdayUtil.getUlangTahunHariIni(allPeople);
+  const btn = document.getElementById('btn-notif-ultah');
+  const badge = document.getElementById('notif-ultah-badge');
+  if (birthdayTodayList.length > 0) {
+    badge.textContent = birthdayTodayList.length;
+    badge.style.display = 'inline-block';
+    btn.classList.add('has-birthday');
+    btn.title = `${birthdayTodayList.length} orang berulang tahun hari ini`;
+  } else {
+    badge.style.display = 'none';
+    btn.classList.remove('has-birthday');
+    btn.title = 'Notifikasi Ulang Tahun';
+  }
+}
+
+function openBirthdayModal() {
+  const list = document.getElementById('birthday-list');
+  if (birthdayTodayList.length === 0) {
+    list.innerHTML = '<li class="empty-row-sm">Tidak ada anggota keluarga yang berulang tahun hari ini.</li>';
+  } else {
+    list.innerHTML = birthdayTodayList.map(({ person, umur }) => `
+      <li class="dashboard-detail-row birthday-row" onclick="openBirthdayPerson('${person.id}')">
+        <span class="dashboard-detail-nama">🎂 ${escapeHtml(person.nama)}</span>
+        <span class="dashboard-detail-ket">${(umur !== null && umur >= 0) ? `Genap ${umur} tahun` : 'Ulang tahun hari ini'}</span>
+      </li>
+    `).join('');
+  }
+  document.getElementById('birthday-modal').style.display = 'flex';
+}
+
+function closeBirthdayModal() {
+  document.getElementById('birthday-modal').style.display = 'none';
+}
+
+function openBirthdayPerson(personId) {
+  closeBirthdayModal();
+  openDetail(personId);
 }
 
 // ---------- Modal Laporan (cari relasi keluarga) ----------

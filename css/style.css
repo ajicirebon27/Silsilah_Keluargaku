@@ -65,6 +65,23 @@ body {
 }
 .admin-link:hover { background: rgba(255,255,255,0.3); }
 
+/* ---------- Lonceng notifikasi ulang tahun ---------- */
+.notif-bell-btn { position: relative; font-size: 16px; line-height: 1; }
+.notif-bell-btn.has-birthday { background: rgba(255,255,255,0.32); animation: bellShake 1.8s ease-in-out infinite; }
+.notif-bell-badge {
+  position: absolute; top: -6px; right: -6px;
+  box-shadow: 0 0 0 2px var(--blue-deep);
+}
+@keyframes bellShake {
+  0%, 90%, 100% { transform: rotate(0); }
+  92% { transform: rotate(-12deg); }
+  94% { transform: rotate(10deg); }
+  96% { transform: rotate(-8deg); }
+  98% { transform: rotate(4deg); }
+}
+.birthday-row { cursor: pointer; }
+.birthday-row:hover { background: var(--blue-pale); border-radius: 6px; }
+
 /* ---------- Layar pilihan tampilan awal (Pohon vs Jelajah/Kartu) ---------- */
 .view-chooser-overlay {
   position: fixed; inset: 0;

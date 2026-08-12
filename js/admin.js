@@ -160,6 +160,8 @@ async function bootAdmin() {
   setupDownload();
   setupAdminTreeSearch();
   setupDashboardDetailModal();
+  setupBirthdayModal();
+  setupAdminViewSwitch();
   await refreshAll();
   await refreshCommentBadge();
   await refreshTrashBadge();
@@ -190,6 +192,63 @@ async function refreshAll() {
   }
   if (laporanSelectedId) renderLaporanDetail();
   refreshRootPersonSelectOptions();
+  refreshBirthdayNotif();
+}
+
+// ---------- Notifikasi Ulang Tahun ----------
+// Sama seperti versi publik (app.js): lonceng di topbar admin menyala kalau
+// ada anggota keluarga yang berulang tahun hari ini. Klik nama pada daftar
+// -> langsung membuka form edit orang tsb (openEditPerson), berguna kalau
+// admin ingin sekalian melengkapi/mengecek datanya saat itu juga.
+let birthdayTodayListAdmin = [];
+
+function setupBirthdayModal() {
+  document.getElementById('btn-notif-ultah').addEventListener('click', openBirthdayModal);
+  document.getElementById('birthday-modal-close').addEventListener('click', closeBirthdayModal);
+  document.getElementById('birthday-modal').addEventListener('click', e => {
+    if (e.target.id === 'birthday-modal') closeBirthdayModal();
+  });
+}
+
+function refreshBirthdayNotif() {
+  birthdayTodayListAdmin = BirthdayUtil.getUlangTahunHariIni(allPeople);
+  const btn = document.getElementById('btn-notif-ultah');
+  const badge = document.getElementById('notif-ultah-badge');
+  if (birthdayTodayListAdmin.length > 0) {
+    badge.textContent = birthdayTodayListAdmin.length;
+    badge.style.display = 'inline-block';
+    btn.classList.add('has-birthday');
+    btn.title = `${birthdayTodayListAdmin.length} orang berulang tahun hari ini`;
+  } else {
+    badge.style.display = 'none';
+    btn.classList.remove('has-birthday');
+    btn.title = 'Notifikasi Ulang Tahun';
+  }
+}
+
+function openBirthdayModal() {
+  const list = document.getElementById('birthday-list');
+  if (birthdayTodayListAdmin.length === 0) {
+    list.innerHTML = '<li class="empty-row-sm">Tidak ada anggota keluarga yang berulang tahun hari ini.</li>';
+  } else {
+    list.innerHTML = birthdayTodayListAdmin.map(({ person, umur }) => `
+      <li class="dashboard-detail-row birthday-row" onclick="openBirthdayPersonAdmin('${person.id}')">
+        <span class="dashboard-detail-nama">🎂 ${escapeHtml(person.nama)}</span>
+        <span class="dashboard-detail-ket">${(umur !== null && umur >= 0) ? `Genap ${umur} tahun` : 'Ulang tahun hari ini'}</span>
+      </li>
+    `).join('');
+  }
+  document.getElementById('birthday-modal').style.display = 'flex';
+}
+
+function closeBirthdayModal() {
+  document.getElementById('birthday-modal').style.display = 'none';
+}
+
+function openBirthdayPersonAdmin(personId) {
+  closeBirthdayModal();
+  document.querySelector('.nav-btn[data-tab="tab-orang"]').click();
+  openEditPerson(personId);
 }
 
 // escapeHtml() sekarang didefinisikan sekali saja di db.js (v14) -- db.js selalu
@@ -213,8 +272,45 @@ function setupTabs() {
       if (btn.dataset.tab === 'tab-komentar') renderComments();
       if (btn.dataset.tab === 'tab-sampah') renderTrash();
       if (btn.dataset.tab === 'tab-dashboard') renderAdminDashboard();
-      if (btn.dataset.tab === 'tab-jelajah') openAdminJelajah();
     });
+  });
+}
+
+// ---------- Ganti Tampilan (Pohon Keluarga / Jelajah) ----------
+// Dulu "Pohon Keluarga" & "Jelajah" adalah tab tersendiri di nav admin.
+// Sekarang keduanya diakses lewat 1 tombol "Ganti Tampilan" di topbar
+// (sama seperti tampilan publik) yang membuka overlay pilihan -- lalu
+// menampilkan section tab-pohon/tab-jelajah yang sama seperti sebelumnya,
+// hanya saja tidak lagi lewat nav-btn biasa.
+function setupAdminViewSwitch() {
+  const chooser = document.getElementById('admin-view-chooser');
+  const btnSwitch = document.getElementById('btn-ganti-tampilan');
+  if (!chooser || !btnSwitch) return;
+
+  function showTabPanel(tabId) {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+  }
+
+  btnSwitch.addEventListener('click', () => { chooser.style.display = 'flex'; });
+
+  document.getElementById('admin-chooser-close').addEventListener('click', () => {
+    chooser.style.display = 'none';
+  });
+  chooser.addEventListener('click', e => {
+    if (e.target.id === 'admin-view-chooser') chooser.style.display = 'none';
+  });
+
+  document.getElementById('admin-choose-tree').addEventListener('click', () => {
+    chooser.style.display = 'none';
+    showTabPanel('tab-pohon');
+  });
+
+  document.getElementById('admin-choose-jelajah').addEventListener('click', () => {
+    chooser.style.display = 'none';
+    showTabPanel('tab-jelajah');
+    openAdminJelajah();
   });
 }
 
