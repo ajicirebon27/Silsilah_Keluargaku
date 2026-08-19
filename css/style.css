@@ -228,6 +228,40 @@ body {
 .tree-search-suggest-sub { color: var(--text-muted); font-size: 12px; }
 .tree-search-suggest-empty { padding: 8px 12px; font-size: 13px; color: var(--text-muted); }
 
+/* Penghitung + navigasi hasil pencarian (utk kasus nama yang sama/kembar):
+   muncul di sebelah kotak cari saat ada >=1 hasil cocok, menunjukkan
+   "X dari Y hasil" dan tombol ‹ › utk lompat antar orang yang namanya sama. */
+.tree-search-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  flex: 0 0 auto;
+}
+.tree-search-nav-btn {
+  width: 24px;
+  height: 24px;
+  line-height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 16px;
+  cursor: pointer;
+}
+.tree-search-nav-btn:hover { background: var(--blue-pale); }
+.tree-search-count {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  padding: 0 2px;
+}
+
 .tree-search-mode {
   padding: 9px 12px;
   border-radius: 20px;

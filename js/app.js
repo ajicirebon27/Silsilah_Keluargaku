@@ -202,12 +202,52 @@ function setupSearch() {
   const input = document.getElementById('tree-search');
   const modeSelect = document.getElementById('tree-search-mode');
   const suggestBox = document.getElementById('tree-search-suggest');
+  const navBox = document.getElementById('tree-search-nav');
+  const navCount = document.getElementById('tree-search-count');
+  const navPrev = document.getElementById('tree-search-prev');
+  const navNext = document.getElementById('tree-search-next');
   if (!input) return;
 
   function closeSuggest() {
     if (!suggestBox) return;
     suggestBox.style.display = 'none';
     suggestBox.innerHTML = '';
+  }
+
+  // v15: nama yang sama/kembar bisa cocok lebih dari satu orang -- semua
+  // kotak yang cocok tetap di-highlight seperti dulu, tapi sekarang kita
+  // juga simpan SELURUH daftar kecocokan (bukan cuma yang pertama) supaya
+  // user bisa lompat antar hasil lewat tombol ‹ › / Enter, dibantu
+  // penghitung "X dari Y hasil" di navBox.
+  let currentMatches = [];
+  let currentMatchIndex = 0;
+
+  function updateNav() {
+    if (!navBox) return;
+    if (currentMatches.length > 0) {
+      navBox.style.display = 'flex';
+      if (navCount) navCount.textContent = `${currentMatchIndex + 1} dari ${currentMatches.length} hasil`;
+    } else {
+      navBox.style.display = 'none';
+      if (navCount) navCount.textContent = '';
+    }
+  }
+
+  function focusMatch(index) {
+    if (!currentMatches.length) return;
+    currentMatchIndex = ((index % currentMatches.length) + currentMatches.length) % currentMatches.length;
+    const person = currentMatches[currentMatchIndex];
+    document.querySelectorAll('#tree-container .tree-node.search-focus').forEach(n => n.classList.remove('search-focus'));
+    const el = document.querySelector(`#tree-container .tree-node[data-id="${person.id}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      // Paksa reflow sblm nambah kelas supaya animasi glow selalu mulai
+      // dr awal lagi, walau elemen yg sama sdh pernah kena glow ini
+      // sebelumnya (mis. user masih mengetik nama yg sama tokohnya).
+      void el.getBoundingClientRect();
+      el.classList.add('search-focus');
+    }
+    updateNav();
   }
 
   function highlightWholeTree(q) {
@@ -221,19 +261,12 @@ function setupSearch() {
       // ikut menyala terus.
       node.classList.remove('search-focus');
     });
-    if (q) {
-      const found = allPeople.find(p => p.nama.toLowerCase().includes(q));
-      if (found) {
-        const el = document.querySelector(`#tree-container .tree-node[data-id="${found.id}"]`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-          // Paksa reflow sblm nambah kelas supaya animasi glow selalu mulai
-          // dr awal lagi, walau elemen yg sama sdh pernah kena glow ini
-          // sebelumnya (mis. user masih mengetik nama yg sama tokohnya).
-          void el.getBoundingClientRect();
-          el.classList.add('search-focus');
-        }
-      }
+    currentMatches = q ? allPeople.filter(p => p.nama.toLowerCase().includes(q)) : [];
+    currentMatchIndex = 0;
+    if (currentMatches.length) {
+      focusMatch(0);
+    } else {
+      updateNav();
     }
   }
 
@@ -271,6 +304,20 @@ function setupSearch() {
       highlightWholeTree(q);
     }
   });
+
+  // Enter (atau Shift+Enter utk mundur) melompat ke hasil berikutnya --
+  // berguna saat nama yang sama muncul berkali-kali & user sudah tahu mau
+  // cek satu-satu tanpa menyentuh mouse.
+  input.addEventListener('keydown', (e) => {
+    const mode = modeSelect ? modeSelect.value : 'all';
+    if (mode === 'all' && e.key === 'Enter' && currentMatches.length) {
+      e.preventDefault();
+      focusMatch(currentMatchIndex + (e.shiftKey ? -1 : 1));
+    }
+  });
+
+  if (navPrev) navPrev.addEventListener('click', () => focusMatch(currentMatchIndex - 1));
+  if (navNext) navNext.addEventListener('click', () => focusMatch(currentMatchIndex + 1));
 
   input.addEventListener('blur', () => {
     // Ditunda sebentar supaya klik pada item saran (lihat mousedown di atas)

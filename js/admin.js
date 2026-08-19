@@ -1617,7 +1617,47 @@ function showSettingFeedback(msg, isError = false) {
 // ratusan kotak.
 function setupAdminTreeSearch() {
   const input = document.getElementById('admin-tree-search');
+  const navBox = document.getElementById('admin-tree-search-nav');
+  const navCount = document.getElementById('admin-tree-search-count');
+  const navPrev = document.getElementById('admin-tree-search-prev');
+  const navNext = document.getElementById('admin-tree-search-next');
   if (!input) return;
+
+  // v15: sama seperti setupSearch() di app.js -- nama yang sama/kembar
+  // disorot semua, tapi kita simpan SELURUH daftar kecocokan supaya admin
+  // bisa lompat antar hasil lewat ‹ › / Enter, dibantu penghitung
+  // "X dari Y hasil".
+  let currentMatches = [];
+  let currentMatchIndex = 0;
+
+  function updateNav() {
+    if (!navBox) return;
+    if (currentMatches.length > 0) {
+      navBox.style.display = 'flex';
+      if (navCount) navCount.textContent = `${currentMatchIndex + 1} dari ${currentMatches.length} hasil`;
+    } else {
+      navBox.style.display = 'none';
+      if (navCount) navCount.textContent = '';
+    }
+  }
+
+  function focusMatch(index) {
+    if (!currentMatches.length) return;
+    currentMatchIndex = ((index % currentMatches.length) + currentMatches.length) % currentMatches.length;
+    const person = currentMatches[currentMatchIndex];
+    document.querySelectorAll('#admin-tree-container .tree-node.search-focus').forEach(n => n.classList.remove('search-focus'));
+    const el = document.querySelector(`#admin-tree-container .tree-node[data-id="${person.id}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      // Paksa reflow sblm nambah kelas supaya animasi glow selalu mulai
+      // dr awal lagi, walau elemen yg sama sdh pernah kena glow ini
+      // sebelumnya (mis. user masih mengetik nama yg sama tokohnya).
+      void el.getBoundingClientRect();
+      el.classList.add('search-focus');
+    }
+    updateNav();
+  }
+
   input.addEventListener('input', () => {
     const q = input.value.trim().toLowerCase();
     document.querySelectorAll('#admin-tree-container .tree-node').forEach(node => {
@@ -1630,21 +1670,25 @@ function setupAdminTreeSearch() {
       // ikut menyala terus.
       node.classList.remove('search-focus');
     });
-    if (q) {
-      const found = allPeople.find(p => p.nama.toLowerCase().includes(q));
-      if (found) {
-        const el = document.querySelector(`#admin-tree-container .tree-node[data-id="${found.id}"]`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-          // Paksa reflow sblm nambah kelas supaya animasi glow selalu mulai
-          // dr awal lagi, walau elemen yg sama sdh pernah kena glow ini
-          // sebelumnya (mis. user masih mengetik nama yg sama tokohnya).
-          void el.getBoundingClientRect();
-          el.classList.add('search-focus');
-        }
-      }
+    currentMatches = q ? allPeople.filter(p => p.nama.toLowerCase().includes(q)) : [];
+    currentMatchIndex = 0;
+    if (currentMatches.length) {
+      focusMatch(0);
+    } else {
+      updateNav();
     }
   });
+
+  // Enter (atau Shift+Enter utk mundur) melompat ke hasil berikutnya.
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && currentMatches.length) {
+      e.preventDefault();
+      focusMatch(currentMatchIndex + (e.shiftKey ? -1 : 1));
+    }
+  });
+
+  if (navPrev) navPrev.addEventListener('click', () => focusMatch(currentMatchIndex - 1));
+  if (navNext) navNext.addEventListener('click', () => focusMatch(currentMatchIndex + 1));
 }
 
 function setupDownload() {

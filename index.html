@@ -58,6 +58,11 @@
         <input type="text" id="tree-search" placeholder="Cari nama di pohon..." class="search-box-float" autocomplete="off">
         <div id="tree-search-suggest" class="tree-search-suggest" style="display:none"></div>
       </div>
+      <div id="tree-search-nav" class="tree-search-nav" style="display:none">
+        <button id="tree-search-prev" class="tree-search-nav-btn" type="button" title="Hasil sebelumnya">&lsaquo;</button>
+        <span id="tree-search-count" class="tree-search-count"></span>
+        <button id="tree-search-next" class="tree-search-nav-btn" type="button" title="Hasil berikutnya">&rsaquo;</button>
+      </div>
       <select id="tree-search-mode" class="tree-search-mode" title="Pilih cakupan pencarian">
         <option value="all">🌳 Seluruh Pohon</option>
         <option value="sub">👪 Sub Keluarga (s.d. cucu)</option>
