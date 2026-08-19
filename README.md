@@ -252,6 +252,14 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+    // v17: foto orang (base64) sekarang disimpan TERPISAH dari dokumen
+    // people/{doc} di sini -- supaya query/listener ke koleksi people yang
+    // dipakai render tabel & pohon keluarga TIDAK ikut menarik data foto
+    // sama sekali (lihat penjelasan lengkap di js/db.js, PeopleFotoAPI).
+    match /peopleFotos/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
     match /marriages/{doc} {
       allow read: if true;
       allow write: if isAdmin();
@@ -283,6 +291,15 @@ service cloud.firestore {
         request.resource.data.uid == request.auth.uid;
       allow update: if isAdmin();
     }
+    // v17: dipakai PeopleAPI.migrateLegacyIfNeeded() (js/db.js) sebagai
+    // penanda "migrasi skema foto/isDeleted sudah pernah dijalankan" supaya
+    // tidak diulang-ulang setiap admin buka halaman. Read publik diizinkan
+    // (dokumen ini tidak berisi apa pun yang sensitif, cuma flag & waktu),
+    // tapi cuma admin yang bisa menulisnya.
+    match /settings/migration {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }
 ```
@@ -301,6 +318,15 @@ service cloud.firestore {
 > republish, kode aplikasi tetap membatasi lewat form & JavaScript, tapi
 > seseorang yang sengaja memanggil Firestore langsung masih bisa mengirim
 > komentar tanpa batas panjang.
+
+> ⚠️ **Kalau kamu sudah punya project & data yang berjalan sebelum perbaikan
+> skalabilitas v17** (foto dipisah ke koleksi `peopleFotos`, field `isDeleted`
+> di-query langsung): **wajib publish ulang rules di atas** (yang sudah
+> menambahkan `match /peopleFotos/{doc}` dan `match /settings/migration`)
+> SEBELUM membuka admin.html versi baru. Kalau rules lama belum di-republish,
+> migrasi data otomatis (jalan sekali saat admin login pertama kali setelah
+> update) akan gagal dengan error "permission denied", dan foto lama tidak
+> akan pernah pindah ke koleksi barunya.
 
 Ini artinya: siapa saja boleh **lihat** data orang & pohon keluarga (sesuai kesepakatan kita), tapi hanya admin yang login yang boleh **mengubah** data. Komentar boleh dikirim siapa saja tapi hanya admin yang bisa membacanya lewat dashboard.
 

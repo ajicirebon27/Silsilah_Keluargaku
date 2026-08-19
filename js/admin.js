@@ -162,21 +162,72 @@ async function bootAdmin() {
   setupDashboardDetailModal();
   setupBirthdayModal();
   setupAdminViewSwitch();
-  await refreshAll();
+
+  // v17: migrasi satu kali (aman dipanggil berkali-kali -- lihat komentar
+  // di migrateLegacyIfNeeded()) supaya database lama punya field isDeleted
+  // & foto sudah dipindah ke koleksi terpisah SEBELUM query bertarget
+  // (where isDeleted==...) & listener real-time di bawah mulai dipasang.
+  try {
+    await PeopleAPI.migrateLegacyIfNeeded();
+  } catch (err) {
+    console.error('Migrasi data gagal:', err);
+    alert('Gagal menyiapkan data (migrasi awal): ' + err.message + '\n\nCoba muat ulang halaman. Kalau terus gagal, data lama mungkin butuh perbaikan manual.');
+  }
+
+  setupRealtimeSubscriptions();
   await refreshCommentBadge();
-  await refreshTrashBadge();
-  await renderAdminDashboard();
 }
 
 // v15: supaya tab "Pohon Keluarga" admin juga default ciutkan & fokus ke
 // leluhur utama (spt tampilan publik) TAPI cuma sekali saja per sesi login --
-// kalau dipaksa ciutkan ulang tiap refreshAll() (dipanggil stlh hampir setiap
-// aksi CRUD admin), cabang yang sedang admin buka utk kerja akan terus
-// tertutup lagi tiap habis menyimpan sesuatu, yang justru mengganggu.
+// kalau dipaksa ciutkan ulang tiap kali data berubah (skrg bisa terjadi
+// kapan saja krn real-time, bukan cuma habis aksi CRUD lokal), cabang yang
+// sedang admin buka utk kerja akan terus tertutup lagi, yang justru mengganggu.
 let adminTreeFocusApplied = false;
 
-async function refreshAll() {
-  [allPeople, allMarriages] = await Promise.all([PeopleAPI.getAll(), MarriageAPI.getAll()]);
+// v17: SUBSCRIBE (bukan fetch sekali) ke people & marriages -- lihat
+// PeopleAPI.subscribe()/MarriageAPI.subscribe() di db.js. Efeknya:
+//  1) Tab admin manapun yang dibuka TIDAK menembak Firestore ulang setiap
+//     kali di-render -- data cukup ditarik sekali oleh listener ini lalu
+//     dipakai bersama oleh semua tab UI (Data Orang, Pohon, Relasi, dst).
+//  2) Kalau ada admin lain (atau tab admin lain di perangkat yang sama)
+//     mengubah data, perubahannya OTOMATIS muncul di sini juga -- tidak
+//     perlu reload manual, dan tidak ada risiko "menimpa balik" karena
+//     tampilan yang dilihat memang selalu versi terbaru dari server.
+let peopleUnsub = null, marriagesUnsub = null, trashUnsub = null;
+let peopleReady = false, marriagesReady = false;
+let allTrash = [];
+
+function setupRealtimeSubscriptions() {
+  if (peopleUnsub) peopleUnsub();
+  if (marriagesUnsub) marriagesUnsub();
+  if (trashUnsub) trashUnsub();
+
+  peopleUnsub = PeopleAPI.subscribe(people => {
+    allPeople = people;
+    peopleReady = true;
+    if (marriagesReady) renderAllFromCache();
+  }, err => alert('Gagal memuat data orang secara real-time: ' + err.message));
+
+  marriagesUnsub = MarriageAPI.subscribe(marriages => {
+    allMarriages = marriages;
+    marriagesReady = true;
+    if (peopleReady) renderAllFromCache();
+  }, err => alert('Gagal memuat data relasi secara real-time: ' + err.message));
+
+  trashUnsub = PeopleAPI.subscribeTrash(trash => {
+    allTrash = trash;
+    refreshTrashBadgeFromCache();
+    if (document.getElementById('tab-sampah')?.classList.contains('active')) renderTrashFromCache();
+  }, err => console.warn('Gagal memuat sampah secara real-time:', err));
+}
+
+// Render ulang SELURUH tampilan admin dari cache di memori (allPeople/
+// allMarriages) -- TIDAK melakukan fetch apapun ke Firestore. Dipanggil
+// otomatis oleh listener real-time di atas tiap kali datanya berubah
+// (termasuk perubahan yang barusan disimpan sendiri, krn Firestore
+// langsung meng-echo balik perubahan lokal ke listener yang sama).
+function renderAllFromCache() {
   renderPeopleTable();
   const adminTreeContainer = document.getElementById('admin-tree-container');
   // Admin menampilkan SEMUA keluarga sekaligus (tdk difilter spt publik) --
@@ -193,7 +244,15 @@ async function refreshAll() {
   if (laporanSelectedId) renderLaporanDetail();
   refreshRootPersonSelectOptions();
   refreshBirthdayNotif();
+  renderAdminDashboard();
 }
+
+// Dipertahankan sebagai alias supaya kode lama yang memanggil refreshAll()/
+// refreshRelasiData() setelah sebuah aksi (mis. selesai simpan/hapus) tetap
+// jalan tanpa perlu diganti satu-satu -- tidak lagi melakukan fetch (data
+// sudah/akan datang otomatis lewat listener di atas), cuma re-render dari
+// cache yang ada saat ini supaya UI langsung terasa responsif.
+async function refreshAll() { renderAllFromCache(); }
 
 // ---------- Notifikasi Ulang Tahun ----------
 // Sama seperti versi publik (app.js): lonceng di topbar admin menyala kalau
@@ -545,8 +604,16 @@ function renderNamaSamaHint() {
     </div>`;
 }
 
+// v17: updatedAt orang yang sedang diedit, dibaca SAAT form dibuka --
+// dikirim balik ke PeopleAPI.update() sebagai expectedUpdatedAt supaya bisa
+// dideteksi kalau ternyata ada admin lain yang sudah menyimpan perubahan
+// lain di orang yang SAMA sementara form ini masih terbuka (lihat komentar
+// lengkap di PeopleAPI.update() -- db.js).
+let editingPersonUpdatedAt = null;
+
 function openPersonForm(personId) {
   editingPersonId = personId;
+  editingPersonUpdatedAt = null;
   pendingFotoFile = null;
 
   const form = document.getElementById('person-form');
@@ -558,6 +625,7 @@ function openPersonForm(personId) {
 
   if (personId) {
     const p = allPeople.find(x => x.id === personId);
+    editingPersonUpdatedAt = p.updatedAt || null;
     document.getElementById('f-nama').value = p.nama || '';
     document.getElementById('f-gender').value = p.jenisKelamin || '';
     document.getElementById('f-alias').value = p.alias || '';
@@ -569,9 +637,15 @@ function openPersonForm(personId) {
     document.getElementById('f-alamat').value = p.alamat || '';
     document.getElementById('f-kontak').value = p.kontak || '';
     document.getElementById('f-catatan').value = p.catatan || '';
-    if (p.fotoUrl) {
-      const img = document.getElementById('f-foto-preview');
-      img.src = p.fotoUrl; img.style.display = 'block';
+    // v17: foto TIDAK ada lagi di objek `p` (dipisah ke koleksi peopleFotos,
+    // lihat db.js) -- baru ditarik di sini, tepat saat form biodata ini
+    // dibuka, bukan ikut ter-load saat render tabel/pohon.
+    if (p.hasFoto) {
+      PeopleAPI.getFoto(personId).then(fotoUrl => {
+        if (!fotoUrl || editingPersonId !== personId) return; // form sudah ditutup/ganti orang saat foto masih dimuat
+        const img = document.getElementById('f-foto-preview');
+        img.src = fotoUrl; img.style.display = 'block';
+      });
     }
   }
 
@@ -658,7 +732,25 @@ async function savePerson(e) {
   try {
     let personId = editingPersonId;
     if (personId) {
-      await PeopleAPI.update(personId, data);
+      try {
+        await PeopleAPI.update(personId, data, editingPersonUpdatedAt);
+      } catch (err) {
+        // v17: BENTROK_EDIT = admin/tab lain sudah menyimpan perubahan lain
+        // di orang yang sama sejak form ini dibuka -- tanya dulu ke admin
+        // yang sedang menyimpan, alih-alih diam-diam menimpa balik punya
+        // orang lain (lihat PeopleAPI.update() di db.js).
+        if (err.code === 'BENTROK_EDIT') {
+          const timpa = confirm(
+            'Data orang ini sudah diubah oleh admin lain sejak form ini dibuka.\n\n' +
+            'Klik OK untuk tetap menimpa dengan perubahanmu, atau Batal untuk menutup form ' +
+            'ini dan memeriksa dulu perubahan terbaru sebelum mengedit ulang.'
+          );
+          if (!timpa) return;
+          await PeopleAPI.update(personId, data); // paksa simpan tanpa pengecekan versi
+        } else {
+          throw err;
+        }
+      }
     } else {
       personId = await PeopleAPI.add(data);
     }
@@ -681,7 +773,6 @@ async function savePerson(e) {
     }
 
     closePersonForm();
-    await refreshAll();
   } catch (err) {
     alert('Gagal menyimpan data: ' + err.message);
   }
@@ -960,8 +1051,10 @@ function renderAnakSection(person) {
   listEl.innerHTML = names.map(n => `<span class="relation-chip">${escapeHtml(n)}</span>`).join(' ');
 }
 
+// v17: sama seperti refreshAll() -- data sudah/akan datang otomatis lewat
+// listener real-time (setupRealtimeSubscriptions()), jadi di sini cukup
+// re-render dari cache, tidak fetch ulang.
 async function refreshRelasiData() {
-  [allPeople, allMarriages] = await Promise.all([PeopleAPI.getAll(), MarriageAPI.getAll()]);
   renderPeopleTable();
   const relasiRootIds = RelationRules.findDefaultTreeRootIds(allPeople, allMarriages, cachedAppSettings.rootPersonId);
   renderTreeSVG(document.getElementById('admin-tree-container'), allPeople, allMarriages, openEditPerson, relasiRootIds);
@@ -1009,12 +1102,17 @@ function selectLaporanPerson(id) {
   renderLaporanDetail();
 }
 
-function renderLaporanDetail() {
+async function renderLaporanDetail() {
   const person = allPeople.find(p => p.id === laporanSelectedId);
   if (!person) return;
+  const idAtRenderTime = laporanSelectedId; // jaga-jaga orang lain dipilih sebelum foto selesai dimuat
 
   const genInfo = RelationRules.getGenerationInfo(laporanSelectedId, allPeople, allMarriages);
-  document.getElementById('laporan-biodata-card').innerHTML = BiodataView.buildFolioHTML(person, genInfo);
+  // v17: foto (kalau ada) baru ditarik di sini, tepat saat folio Laporan
+  // ini dibuka -- bukan ikut ter-load bersama seluruh data orang.
+  const fotoUrl = person.hasFoto ? await PeopleAPI.getFoto(laporanSelectedId) : null;
+  if (idAtRenderTime !== laporanSelectedId) return;
+  document.getElementById('laporan-biodata-card').innerHTML = BiodataView.buildFolioHTML(person, genInfo, fotoUrl);
 
   const lines = RelationRules.generateNarrative(laporanSelectedId, allPeople, allMarriages);
   const listEl = document.getElementById('laporan-narrative-list');
@@ -1083,22 +1181,25 @@ async function deleteComment(id) {
 // TAB: SAMPAH (orang yang di-soft-delete, bisa dipulihkan atau dihapus permanen)
 // ======================================================================
 
-async function refreshTrashBadge() {
-  const trash = await PeopleAPI.getTrash();
+// v17: sekarang cuma membaca allTrash (di-update otomatis oleh
+// PeopleAPI.subscribeTrash() real-time, lihat setupRealtimeSubscriptions())
+// -- tidak fetch ulang ke Firestore tiap dipanggil.
+function refreshTrashBadgeFromCache() {
   const badge = document.getElementById('badge-sampah');
   if (!badge) return;
-  if (trash.length > 0) {
-    badge.textContent = trash.length;
+  if (allTrash.length > 0) {
+    badge.textContent = allTrash.length;
     badge.style.display = 'inline-block';
   } else {
     badge.style.display = 'none';
   }
 }
+async function refreshTrashBadge() { refreshTrashBadgeFromCache(); }
 
-async function renderTrash() {
+function renderTrashFromCache() {
   const container = document.getElementById('trash-list');
   if (!container) return;
-  const trash = await PeopleAPI.getTrash();
+  const trash = allTrash;
 
   if (trash.length === 0) {
     container.innerHTML = '<p class="empty-row">Sampah kosong.</p>';
@@ -1126,17 +1227,17 @@ async function renderTrash() {
       </div>`;
   }).join('');
 }
+// Alias: kode lama memanggil renderTrash() (mis. saat tab Sampah dibuka) --
+// sekarang cukup render ulang dari cache, listener real-time yang menjaga
+// allTrash tetap up-to-date (lihat setupRealtimeSubscriptions()).
+async function renderTrash() { renderTrashFromCache(); }
 
 async function restorePersonRow(id) {
   await PeopleAPI.restore(id);
-  await refreshAll();
-  await renderTrash();
-  await refreshTrashBadge();
 }
 
 async function hardDeletePersonRow(id) {
-  const trash = await PeopleAPI.getTrash();
-  const p = trash.find(x => x.id === id);
+  const p = allTrash.find(x => x.id === id);
   const nama = p ? p.nama : 'orang ini';
   const ok = confirm(
     `Hapus "${nama}" secara PERMANEN?\n\n` +
@@ -1146,9 +1247,6 @@ async function hardDeletePersonRow(id) {
   );
   if (!ok) return;
   await PeopleAPI.hardDelete(id);
-  await refreshAll();
-  await renderTrash();
-  await refreshTrashBadge();
 }
 
 // ======================================================================
@@ -1161,10 +1259,8 @@ async function renderAdminDashboard() {
   if (!contentEl) return;
 
   const stats = StatsAPI.computeBasicStats(allPeople, allMarriages);
-  const [unreadComments, trash] = await Promise.all([
-    CommentAPI.getUnreadCount().catch(() => 0),
-    PeopleAPI.getTrash().catch(() => [])
-  ]);
+  const unreadComments = await CommentAPI.getUnreadCount().catch(() => 0);
+  const trash = allTrash;
 
   const cards = [
     { label: 'Total Orang', value: stats.totalOrang, icon: '👥', tone: 'blue', key: 'totalOrang' },
@@ -1235,9 +1331,8 @@ async function openDashboardDetail(key) {
         ket: `untuk ${peopleMap.get(c.orangId)?.nama || 'orang tidak diketahui'}`
       }));
   } else if (key === 'dataSampah') {
-    const trash = await PeopleAPI.getTrash().catch(() => []);
     title = 'Data di Sampah';
-    rows = trash.map(p => ({ nama: p.nama, ket: p.jenisKelamin || '-' }));
+    rows = allTrash.map(p => ({ nama: p.nama, ket: p.jenisKelamin || '-' }));
   } else {
     const detail = StatsAPI.getDetail(key, allPeople, allMarriages);
     title = detail.title;
@@ -1366,10 +1461,18 @@ function setupSettings() {
     // suatu saat perlu restore ke project Firebase baru, pengaturan ini hilang
     // dan harus diset ulang manual. settings/admin (UID admin) SENGAJA tidak
     // diekspor -- itu bukan data keluarga & tidak relevan dipulihkan mentah.
-    const [people, marriages, comments, settings] = await Promise.all([
-      PeopleAPI.getAll(), MarriageAPI.getAll(), CommentAPI.getAll(), SettingsAPI.getAppSettings()
+    const [people, marriages, comments, settings, fotoMap] = await Promise.all([
+      PeopleAPI.getAll(), MarriageAPI.getAll(), CommentAPI.getAll(), SettingsAPI.getAppSettings(),
+      // v17: foto sekarang di koleksi terpisah (peopleFotos) -- backup HARUS
+      // tetap menyertakan foto supaya restore-nya lengkap, jadi di sinilah
+      // SATU-SATUNYA tempat yang sengaja menarik seluruh foto sekaligus.
+      PeopleFotoAPI.getAllAsMap()
     ]);
-    const blob = new Blob([JSON.stringify({ people, marriages, comments, settings }, null, 2)], { type: 'application/json' });
+    const peopleWithFoto = people.map(p => {
+      const fotoUrl = fotoMap.get(p.id);
+      return fotoUrl ? { ...p, fotoUrl } : p;
+    });
+    const blob = new Blob([JSON.stringify({ people: peopleWithFoto, marriages, comments, settings }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

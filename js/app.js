@@ -417,8 +417,14 @@ function openDetail(personId) {
     .filter(Boolean)
     .map(c => c.nama);
 
-  const fotoHtml = p.fotoUrl
-    ? `<img src="${p.fotoUrl}" class="detail-photo" alt="Foto ${escapeHtml(p.nama)}">`
+  // v17: foto TIDAK ikut ter-load bersama seluruh data orang lagi (dipisah
+  // ke koleksi peopleFotos, lihat db.js) -- di sini ditampilkan placeholder
+  // dulu, lalu diganti begitu fotonya selesai ditarik (hanya kalau memang
+  // ada, ditandai lewat p.hasFoto -- supaya tidak menembak Firestore
+  // percuma utk orang yang memang belum punya foto).
+  const fotoHtml = p.hasFoto
+    ? `<img id="detail-photo-img" class="detail-photo" alt="Foto ${escapeHtml(p.nama)}" style="display:none">
+       <div id="detail-photo-loading" class="detail-photo detail-photo-placeholder">…</div>`
     : `<div class="detail-photo detail-photo-placeholder">${escapeHtml((p.nama || '?').charAt(0))}</div>`;
 
   document.getElementById('detail-content').innerHTML = `
@@ -441,6 +447,17 @@ function openDetail(personId) {
   document.getElementById('comment-form').reset();
   document.getElementById('comment-feedback').textContent = '';
   document.getElementById('detail-modal').style.display = 'flex';
+
+  if (p.hasFoto) {
+    PeopleAPI.getFoto(personId).then(fotoUrl => {
+      if (currentPersonId !== personId) return; // modal sudah ditutup/ganti orang saat foto masih dimuat
+      const img = document.getElementById('detail-photo-img');
+      const loading = document.getElementById('detail-photo-loading');
+      if (!img) return;
+      if (fotoUrl) { img.src = fotoUrl; img.style.display = 'block'; if (loading) loading.style.display = 'none'; }
+      else if (loading) { loading.textContent = escapeHtml((p.nama || '?').charAt(0)); }
+    });
+  }
 }
 
 function row(label, value) {
@@ -563,7 +580,7 @@ function renderLaporanSearchResults(query) {
   `).join('') || '<div class="relasi-result-empty">Tidak ditemukan.</div>';
 }
 
-function selectLaporanPerson(id) {
+async function selectLaporanPerson(id) {
   laporanSelectedId = id;
   document.getElementById('laporan-search').value = '';
   document.getElementById('laporan-search-results').innerHTML = '';
@@ -571,7 +588,15 @@ function selectLaporanPerson(id) {
 
   const person = allPeople.find(p => p.id === id);
   const genInfo = RelationRules.getGenerationInfo(id, allPeople, allMarriages);
-  document.getElementById('laporan-biodata-card').innerHTML = BiodataView.buildFolioHTML(person, genInfo);
+  // v17: tampilkan folio dulu tanpa foto (cepat), lalu foto (kalau ada)
+  // ditarik terpisah & disisipkan begitu selesai -- lihat penjelasan
+  // pemisahan foto di db.js (PeopleFotoAPI).
+  document.getElementById('laporan-biodata-card').innerHTML = BiodataView.buildFolioHTML(person, genInfo, null);
+  if (person && person.hasFoto) {
+    const fotoUrl = await PeopleAPI.getFoto(id);
+    if (laporanSelectedId !== id) return; // sudah ganti orang lain sebelum foto selesai dimuat
+    document.getElementById('laporan-biodata-card').innerHTML = BiodataView.buildFolioHTML(person, genInfo, fotoUrl);
+  }
 
   const lines = RelationRules.generateNarrative(id, allPeople, allMarriages);
   const listEl = document.getElementById('laporan-narrative-list');

@@ -108,60 +108,245 @@ async function writeInChunks(items, collectionName) {
     items.slice(i, i + CHUNK).forEach(item => {
       const { id, ...data } = item;
       if (!id) return;
-      if ('createdAt' in data) data.createdAt = restoreTimestampField(data.createdAt);
+      // v17: 'updatedAt' & 'deletedAt' ditambahkan ke daftar ini juga --
+      // sebelumnya cuma 'createdAt' -- supaya backup yang dibuat setelah
+      // perbaikan skalabilitas ini (yang ikut mengekspor field2 tsb) bisa
+      // dipulihkan dengan tipe Timestamp yang benar, bukan tertinggal jadi
+      // objek biasa {seconds,nanoseconds} yang tidak dikenali Firestore Rules.
+      ['createdAt', 'updatedAt', 'deletedAt'].forEach(field => {
+        if (field in data && data[field]) data[field] = restoreTimestampField(data[field]);
+      });
       batch.set(db.collection(collectionName).doc(id), data);
     });
     await batch.commit();
   }
 }
 
-const PeopleAPI = {
-  // Hanya kembalikan orang yang TIDAK sedang di sampah -- ini yang dipakai
-  // tampilan publik, tabel Data Orang, dan render pohon keluarga.
-  async getAll() {
-    const snap = await db.collection('people').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => !p.deletedAt);
+// =====================================================================
+// FOTO ORANG -- SENGAJA disimpan di koleksi TERPISAH (peopleFotos/{id}),
+// BUKAN sebagai field di dokumen people/{id}. Alasannya: field foto
+// (base64, bisa ratusan KB per orang) kalau ikut nempel di dokumen people,
+// otomatis ikut ter-download SETIAP kali people di-query -- termasuk saat
+// cuma butuh render tabel/pohon yang sama sekali tidak menampilkan foto.
+// Dengan dipisah, dokumen people/{id} tetap kecil (cukup field teks biasa)
+// dan foto HANYA ditarik saat benar-benar dibutuhkan: form edit orang
+// dibuka, biodata/folio dilihat, atau modal detail publik dibuka -- lihat
+// PeopleAPI.getFoto() di bawah, dipanggil dari admin.js/app.js persis di
+// titik itu, bukan ikut ter-load saat render tabel/pohon.
+// people/{id} tetap menyimpan flag ringan hasFoto:boolean supaya UI bisa
+// tahu "orang ini punya foto atau tidak" (mis. utk statistik Dashboard)
+// TANPA perlu menarik data fotonya.
+// =====================================================================
+const PeopleFotoAPI = {
+  _cache: new Map(), // cache di memori per sesi -- biodata yg sudah pernah dibuka tidak minta ulang ke Firestore
+  async get(id) {
+    if (this._cache.has(id)) return this._cache.get(id);
+    const doc = await db.collection('peopleFotos').doc(id).get();
+    const url = doc.exists ? (doc.data().fotoUrl || null) : null;
+    this._cache.set(id, url);
+    return url;
   },
-  // Khusus daftar isi Sampah (tab admin).
-  async getTrash() {
+  async set(id, base64) {
+    await db.collection('peopleFotos').doc(id).set({ fotoUrl: base64 });
+    await db.collection('people').doc(id).update({ hasFoto: true });
+    this._cache.set(id, base64);
+  },
+  async remove(id) {
+    await db.collection('peopleFotos').doc(id).delete();
+    await db.collection('people').doc(id).update({ hasFoto: false });
+    this._cache.delete(id);
+  },
+  invalidate(id) {
+    this._cache.delete(id);
+  },
+  // KHUSUS dipakai saat Export Backup -- di situ SEMUA foto memang sengaja
+  // dan sepenuhnya dibutuhkan sekaligus (isi file backup), jadi menarik
+  // seluruh koleksi di satu titik ini itu wajar & satu-satunya tempat yang
+  // boleh melakukannya (bukan bagian dari alur render normal).
+  async getAllAsMap() {
+    const snap = await db.collection('peopleFotos').get();
+    const map = new Map();
+    snap.docs.forEach(d => map.set(d.id, d.data().fotoUrl || null));
+    return map;
+  }
+};
+
+const PeopleAPI = {
+  // v17: MIGRASI SATU KALI (dijalankan otomatis dari bootAdmin() sebelum
+  // subscribe/getAll dipakai) -- database lama (sebelum perbaikan
+  // skalabilitas ini) menyimpan fotoUrl langsung di dokumen people & belum
+  // punya field isDeleted (cuma deletedAt). Supaya getAll()/getTrash() di
+  // bawah bisa langsung query isDeleted==... di server (bukan tarik semua
+  // lalu filter di client seperti sebelumnya), field ini harus ada dulu di
+  // SEMUA dokumen lama. Migrasi ini HANYA menyentuh dokumen yang belum
+  // punya field yang dibutuhkan, dan menandai settings/migration supaya
+  // tidak diulang lagi di kunjungan berikutnya (baca-semua-dokumen cuma
+  // terjadi SEKALI seumur hidup instalasi, bukan tiap buka halaman).
+  async migrateLegacyIfNeeded() {
+    const flagRef = db.collection('settings').doc('migration');
+    const flagDoc = await flagRef.get();
+    if (flagDoc.exists && flagDoc.data().v17FotoIsDeleted) return { migrated: false };
+
     const snap = await db.collection('people').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => !!p.deletedAt);
+    let batch = db.batch();
+    let opsInBatch = 0;
+    let totalFotoDipindah = 0;
+    const FLUSH_AT = 400; // batas 500 operasi/batch Firestore, disisakan margin
+
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      const updates = {};
+      if (data.isDeleted === undefined) updates.isDeleted = !!data.deletedAt;
+      if (data.hasFoto === undefined) updates.hasFoto = !!data.fotoUrl;
+      if (data.fotoUrl) {
+        await db.collection('peopleFotos').doc(doc.id).set({ fotoUrl: data.fotoUrl });
+        updates.fotoUrl = firebase.firestore.FieldValue.delete();
+        totalFotoDipindah++;
+      }
+      if (Object.keys(updates).length) {
+        batch.update(doc.ref, updates);
+        opsInBatch++;
+        if (opsInBatch >= FLUSH_AT) {
+          await batch.commit();
+          batch = db.batch();
+          opsInBatch = 0;
+        }
+      }
+    }
+    if (opsInBatch > 0) await batch.commit();
+    await flagRef.set({
+      v17FotoIsDeleted: true,
+      migratedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      totalFotoDipindah
+    });
+    return { migrated: true, totalFotoDipindah };
+  },
+
+  // ---- REAL-TIME (onSnapshot) -- dipakai render tabel/pohon admin & tampilan
+  // publik. Query isDeleted==false dilakukan LANGSUNG DI SERVER (bukan
+  // tarik-semua-lalu-filter di client seperti sebelumnya), dan payload-nya
+  // TIDAK berisi foto sama sekali (lihat penjelasan PeopleFotoAPI di atas) --
+  // jadi tetap ringan walau jumlah orang & foto terus bertambah. Karena
+  // pakai onSnapshot (bukan get() sekali), callback ini otomatis terpanggil
+  // lagi setiap kali ada perubahan -- termasuk perubahan dari admin/tab lain
+  // -- tanpa perlu reload manual. Kembalikan fungsi unsubscribe.
+  subscribe(callback, onError) {
+    return db.collection('people').where('isDeleted', '==', false)
+      .onSnapshot(
+        snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+        err => { console.error('PeopleAPI.subscribe gagal:', err); if (onError) onError(err); }
+      );
+  },
+  // Sama seperti subscribe(), khusus daftar isi Sampah (tab admin).
+  subscribeTrash(callback, onError) {
+    return db.collection('people').where('isDeleted', '==', true)
+      .onSnapshot(
+        snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+        err => { console.error('PeopleAPI.subscribeTrash gagal:', err); if (onError) onError(err); }
+      );
+  },
+  // Versi ambil-sekali (BUKAN real-time) dari query yang sama -- dipakai di
+  // tempat yang memang cuma butuh 1 kali snapshot data (mis. Export Backup),
+  // BUKAN untuk render tampilan yang harus selalu ter-sinkron (pakai
+  // subscribe()/subscribeTrash() untuk itu).
+  async getAll() {
+    const snap = await db.collection('people').where('isDeleted', '==', false).get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+  async getTrash() {
+    const snap = await db.collection('people').where('isDeleted', '==', true).get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   },
   async get(id) {
     const doc = await db.collection('people').doc(id).get();
     return doc.exists ? { id: doc.id, ...doc.data() } : null;
   },
+
+  // Ambil foto seseorang -- HANYA dipanggil dari titik yang memang butuh
+  // menampilkan foto (form edit, biodata/folio, modal detail). Lihat
+  // PeopleFotoAPI di atas untuk alasan foto dipisah dari dokumen people.
+  async getFoto(id) { return PeopleFotoAPI.get(id); },
+
   async add(data) {
+    const { fotoUrl, ...rest } = data; // foto (kalau ada) ditulis terpisah ke peopleFotos
     const ref = await db.collection('people').add({
-      ...data,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      ...rest,
+      isDeleted: false,
+      hasFoto: !!fotoUrl,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    if (fotoUrl) await PeopleFotoAPI.set(ref.id, fotoUrl);
     return ref.id;
   },
-  async update(id, data) {
-    await db.collection('people').doc(id).update(data);
+
+  // v17: sekarang ditulis lewat TRANSACTION + pengecekan field updatedAt --
+  // ini bentuk sederhana "optimistic locking": kalau expectedUpdatedAt
+  // dikirim (form edit mengisinya dari updatedAt yang dibaca SAAT form
+  // dibuka) dan ternyata data di server sudah lebih baru dari itu (berarti
+  // ada admin/tab lain yang sudah menyimpan perubahan lain di dokumen yang
+  // SAMA setelah form ini dibuka), penyimpanan DIBATALKAN dan melempar
+  // error berkode 'BENTROK_EDIT' -- supaya pemanggil (lihat savePerson() di
+  // admin.js) bisa memberi tahu admin & minta konfirmasi, alih-alih diam-
+  // diam menimpa balik perubahan orang lain (last-write-wins tanpa deteksi
+  // konflik). Kalau expectedUpdatedAt tidak dikirim (dipanggil dari alur
+  // lain yang bukan lewat form, mis. drag relasi di pohon), pengecekan ini
+  // dilewati -- tetap aman krn field yg diubah biasanya bukan field yg sama.
+  async update(id, data, expectedUpdatedAt) {
+    const { fotoUrl, ...rest } = data;
+    const ref = db.collection('people').doc(id);
+    await db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) {
+        const err = new Error('Data orang ini sudah tidak ada (mungkin baru saja dihapus admin lain).');
+        err.code = 'DATA_HILANG';
+        throw err;
+      }
+      if (expectedUpdatedAt && expectedUpdatedAt.toMillis) {
+        const current = snap.data().updatedAt;
+        const curMillis = current && current.toMillis ? current.toMillis() : 0;
+        if (curMillis > expectedUpdatedAt.toMillis()) {
+          const err = new Error('Data orang ini sudah diubah oleh admin lain sejak form ini dibuka.');
+          err.code = 'BENTROK_EDIT';
+          throw err;
+        }
+      }
+      tx.update(ref, { ...rest, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    });
+    if (fotoUrl !== undefined) {
+      if (fotoUrl) await PeopleFotoAPI.set(id, fotoUrl);
+      else await PeopleFotoAPI.remove(id);
+    }
   },
   // "Hapus" dari Tab Data Orang kini adalah SOFT DELETE: dokumen orang cuma
-  // ditandai deletedAt, bukan langsung dihapus permanen -- supaya klik yang
-  // tidak sengaja masih bisa dipulihkan lewat tab Sampah. Data relasi
-  // (marriages) SENGAJA tidak diubah sama sekali saat soft-delete, supaya
-  // kalau dipulihkan, semua relasi otomatis utuh kembali seperti semula.
+  // ditandai isDeleted:true (+deletedAt utk keterangan waktu di tab Sampah),
+  // bukan langsung dihapus permanen -- supaya klik yang tidak sengaja masih
+  // bisa dipulihkan lewat tab Sampah. Data relasi (marriages) SENGAJA tidak
+  // diubah sama sekali saat soft-delete, supaya kalau dipulihkan, semua
+  // relasi otomatis utuh kembali seperti semula.
   async delete(id) {
     await db.collection('people').doc(id).update({
-      deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+      isDeleted: true,
+      deletedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   },
   // Keluarkan lagi dari sampah.
   async restore(id) {
     await db.collection('people').doc(id).update({
-      deletedAt: firebase.firestore.FieldValue.delete()
+      isDeleted: false,
+      deletedAt: firebase.firestore.FieldValue.delete(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   },
   // Hapus permanen (dipanggil dari tab Sampah). Ini logika hapus lama:
-  // sungguh-sungguh menghapus dokumen orang + membersihkan semua rujukan
-  // relasi (marriages) yang melibatkannya. TIDAK BISA DIBATALKAN.
+  // sungguh-sungguh menghapus dokumen orang (+ dokumen fotonya kalau ada)
+  // + membersihkan semua rujukan relasi (marriages) yang melibatkannya.
+  // TIDAK BISA DIBATALKAN.
   async hardDelete(id) {
     await db.collection('people').doc(id).delete();
+    await db.collection('peopleFotos').doc(id).delete().catch(() => {});
+    PeopleFotoAPI.invalidate(id);
     const snap = await db.collection('marriages').get();
     const batch = db.batch();
     snap.docs.forEach(doc => {
@@ -181,13 +366,47 @@ const PeopleAPI = {
   },
   // Restore dari file backup JSON. Menulis kembali dengan ID ASLI supaya semua
   // referensi (orangId1/2, childIds pada marriages, orangId pada comments)
-  // tetap nyambung persis seperti sebelum backup diambil.
+  // tetap nyambung persis seperti sebelum backup diambil. Backup JSON masih
+  // membawa fotoUrl per-orang apa adanya (lihat tombol Export di admin.js,
+  // yang menyertakan foto dari PeopleFotoAPI.getAllAsMap()) -- di sini foto
+  // itu dipisah lagi ke koleksi peopleFotos supaya struktur tetap konsisten
+  // dengan skema baru, bukan ikut ditulis balik ke dokumen people.
   async importAll(peopleArr) {
-    await writeInChunks(peopleArr, 'people');
+    const fotoEntries = []; // {id, fotoUrl}
+    const cleaned = peopleArr.map(p => {
+      const { fotoUrl, ...rest } = p;
+      if (fotoUrl) fotoEntries.push({ id: p.id, fotoUrl });
+      // Backup lama (sebelum v17) tidak punya field isDeleted sama sekali,
+      // cuma deletedAt -- turunkan dari situ kalau isDeleted tidak ada,
+      // sama seperti migrateLegacyIfNeeded().
+      const isDeleted = rest.isDeleted !== undefined ? !!rest.isDeleted : !!rest.deletedAt;
+      return { ...rest, isDeleted, hasFoto: !!fotoUrl };
+    });
+    await writeInChunks(cleaned, 'people');
+    const CHUNK = 400;
+    for (let i = 0; i < fotoEntries.length; i += CHUNK) {
+      const batch = db.batch();
+      fotoEntries.slice(i, i + CHUNK).forEach(({ id, fotoUrl }) => {
+        batch.set(db.collection('peopleFotos').doc(id), { fotoUrl });
+      });
+      await batch.commit();
+    }
+    fotoEntries.forEach(({ id, fotoUrl }) => PeopleFotoAPI._cache.set(id, fotoUrl));
   }
 };
 
 const MarriageAPI = {
+  // Koleksi marriages biasanya jauh lebih kecil & tidak berisi foto, jadi
+  // aman ditarik utuh -- tapi tetap dijadikan onSnapshot (bukan get() sekali)
+  // supaya perubahan relasi dari admin/tab lain juga langsung ter-refleksi
+  // di tab yang sedang terbuka (lihat penjelasan real-time sync di
+  // PeopleAPI.subscribe() di atas). Kembalikan fungsi unsubscribe.
+  subscribe(callback, onError) {
+    return db.collection('marriages').onSnapshot(
+      snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      err => { console.error('MarriageAPI.subscribe gagal:', err); if (onError) onError(err); }
+    );
+  },
   async getAll() {
     const snap = await db.collection('marriages').get();
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -726,7 +945,7 @@ const StatsAPI = {
       totalKeluarga: totalPasangan + totalOrtuTunggal,
       totalAnakTercatat: childIdSet.size,
       totalPoligami,
-      tanpaFoto: people.filter(p => !p.fotoUrl).length,
+      tanpaFoto: people.filter(p => !p.hasFoto).length,
       tanpaTglLahir: people.filter(p => !p.tglLahir).length,
       belumTerelasi,
       maxGenerasi
@@ -794,7 +1013,7 @@ const StatsAPI = {
         };
 
       case 'tanpaFoto':
-        return { title: 'Belum Ada Foto', rows: asRows(people.filter(p => !p.fotoUrl), () => '') };
+        return { title: 'Belum Ada Foto', rows: asRows(people.filter(p => !p.hasFoto), () => '') };
 
       case 'tanpaTglLahir':
         return { title: 'Belum Ada Tanggal Lahir', rows: asRows(people.filter(p => !p.tglLahir), () => '') };
@@ -1028,12 +1247,18 @@ const BiodataView = {
     return rows.join('') || `<dt>Biodata</dt><dd>Belum ada keterangan biodata tambahan.</dd>`;
   },
 
-  buildFolioHTML(person, generationInfo) {
+  // v17: fotoUrl SEKARANG dikirim sebagai parameter terpisah (bukan lagi
+  // person.fotoUrl) -- foto disimpan di koleksi terpisah (peopleFotos) dan
+  // baru diambil (PeopleAPI.getFoto(id)) tepat saat folio ini mau
+  // ditampilkan, lihat pemanggilnya di admin.js (tab Laporan) & app.js
+  // (modal Laporan publik). Kirim null/undefined kalau orang ini memang
+  // belum punya foto (hasFoto:false) supaya tidak perlu fetch percuma.
+  buildFolioHTML(person, generationInfo, fotoUrl) {
     const namaDisplay = escapeHtml(person.nama || '-');
     const aliasDisplay = person.alias ? escapeHtml(person.alias) : '';
     const initial = (person.nama || '?').trim().charAt(0).toUpperCase();
-    const fotoHTML = person.fotoUrl
-      ? `<img src="${person.fotoUrl}" class="biodata-foto-img" alt="Foto ${namaDisplay}">`
+    const fotoHTML = fotoUrl
+      ? `<img src="${fotoUrl}" class="biodata-foto-img" alt="Foto ${namaDisplay}">`
       : `<div class="biodata-foto-placeholder">${escapeHtml(initial)}</div>`;
     const genBadge = (generationInfo && generationInfo.generasi)
       ? `<div class="biodata-gen-badge">Generasi ke-${generationInfo.generasi}${generationInfo.isLeluhurSendiri ? '<span class="biodata-gen-sub">Leluhur Awal</span>' : ''}</div>`
