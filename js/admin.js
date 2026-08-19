@@ -755,12 +755,24 @@ function renderRelasiDetail() {
 
 // ---------- Bagian Pasangan ----------
 function renderPasanganSection(person) {
-  const myMarriages = allMarriages.filter(m => m.orangId1 === person.id || m.orangId2 === person.id);
+  const myMarriages = allMarriages
+    .filter(m => m.orangId1 === person.id || m.orangId2 === person.id)
+    .sort((a, b) => (a.urutanPasangan || 1) - (b.urutanPasangan || 1));
+  const isPoly = myMarriages.length > 1;
   const listEl = document.getElementById('relasi-pasangan-list');
-  listEl.innerHTML = myMarriages.map(m => {
+  listEl.innerHTML = myMarriages.map((m, idx) => {
     const partnerId = m.orangId1 === person.id ? m.orangId2 : m.orangId1;
     const partner = partnerId ? allPeople.find(p => p.id === partnerId) : null;
-    return `<div class="relation-chip">${escapeHtml(partner ? partner.nama : '(tidak diketahui)')}
+    const orderLabel = isPoly ? `<span class="chip-sub">ke-${idx + 1}</span>` : '';
+    // Naik/turun urutan hanya berguna kalau ada >1 pasangan (poligami) --
+    // untuk memperbaiki kasus mis. Dewi ternyata istri pertama tapi baru
+    // diinput belakangan sehingga tersimpan sbg istri ke-2/3.
+    const upBtn = isPoly && idx > 0
+      ? `<button type="button" class="btn-reorder" title="Naikkan urutan" onclick="movePasanganUp('${person.id}','${m.id}')">&uarr;</button>` : '';
+    const downBtn = isPoly && idx < myMarriages.length - 1
+      ? `<button type="button" class="btn-reorder" title="Turunkan urutan" onclick="movePasanganDown('${person.id}','${m.id}')">&darr;</button>` : '';
+    return `<div class="relation-chip">${orderLabel} ${escapeHtml(partner ? partner.nama : '(tidak diketahui)')}
+      ${upBtn}${downBtn}
       <button type="button" onclick="removePasangan('${m.id}')">&times;</button></div>`;
   }).join('') || '<p class="empty-row-sm">Belum ada pasangan tercatat.</p>';
 
@@ -806,6 +818,39 @@ async function addPasanganForSelected() {
 async function removePasangan(marriageId) {
   if (!confirm('Hapus relasi pasangan ini? Anak-anak dari pernikahan ini juga akan kehilangan relasi orang tua tersebut.')) return;
   await MarriageAPI.delete(marriageId);
+  await refreshRelasiData();
+}
+
+// Naik/turunkan urutan istri/suami (mis. Dewi baru diketahui & diinput
+// belakangan, padahal sebenarnya istri pertama). Menukar angka
+// urutanPasangan dgn pernikahan tetangganya di urutan tampil saat ini.
+function getSortedMarriagesOf(personId) {
+  return allMarriages
+    .filter(m => m.orangId1 === personId || m.orangId2 === personId)
+    .sort((a, b) => (a.urutanPasangan || 1) - (b.urutanPasangan || 1));
+}
+
+async function movePasanganUp(personId, marriageId) {
+  const sorted = getSortedMarriagesOf(personId);
+  const idx = sorted.findIndex(m => m.id === marriageId);
+  if (idx <= 0) return;
+  const current = sorted[idx], prev = sorted[idx - 1];
+  await MarriageAPI.swapUrutanPasangan(
+    current.id, current.urutanPasangan || (idx + 1),
+    prev.id, prev.urutanPasangan || idx
+  );
+  await refreshRelasiData();
+}
+
+async function movePasanganDown(personId, marriageId) {
+  const sorted = getSortedMarriagesOf(personId);
+  const idx = sorted.findIndex(m => m.id === marriageId);
+  if (idx < 0 || idx >= sorted.length - 1) return;
+  const current = sorted[idx], next = sorted[idx + 1];
+  await MarriageAPI.swapUrutanPasangan(
+    current.id, current.urutanPasangan || (idx + 1),
+    next.id, next.urutanPasangan || (idx + 2)
+  );
   await refreshRelasiData();
 }
 
@@ -947,17 +992,81 @@ async function saveOrtuForSelected() {
 
 // ---------- Bagian Anak (read-only) ----------
 function renderAnakSection(person) {
-  const childIds = RelationRules.getChildren(person.id, allMarriages);
+  // Dikelompokkan per pernikahan (bukan digabung semua) -- urutan anak
+  // (childIds) memang tersimpan per pernikahan, jadi naik/turun & urutkan
+  // otomatis juga harus beroperasi per pernikahan, bukan lintas pernikahan.
+  const myMarriages = allMarriages
+    .filter(m => (m.orangId1 === person.id || m.orangId2 === person.id) && (m.childIds || []).length > 0)
+    .sort((a, b) => (a.urutanPasangan || 1) - (b.urutanPasangan || 1));
   const listEl = document.getElementById('relasi-anak-list');
-  if (childIds.length === 0) {
+
+  if (myMarriages.length === 0) {
     listEl.textContent = 'Belum ada anak tercatat.';
     return;
   }
-  const names = childIds.map(cid => {
-    const c = allPeople.find(p => p.id === cid);
-    return c ? c.nama : '(tidak ditemukan)';
-  });
-  listEl.innerHTML = names.map(n => `<span class="relation-chip">${escapeHtml(n)}</span>`).join(' ');
+
+  const isPoly = myMarriages.length > 1;
+  listEl.innerHTML = myMarriages.map(m => {
+    const partnerId = m.orangId1 === person.id ? m.orangId2 : m.orangId1;
+    const partner = partnerId ? allPeople.find(p => p.id === partnerId) : null;
+    const groupLabel = isPoly
+      ? `<p class="relasi-anak-group-label">Dari pernikahan dengan ${escapeHtml(partner ? partner.nama : '(tidak diketahui)')}:</p>`
+      : '';
+
+    const childIds = m.childIds || [];
+    const allHaveTgl = childIds.length > 1 && childIds.every(cid => {
+      const c = allPeople.find(p => p.id === cid);
+      return c && c.tglLahir;
+    });
+    const sortBtn = childIds.length > 1
+      ? `<button type="button" class="btn-link" style="font-size:12px;margin:4px 0 6px" onclick="autoSortAnakByTglLahir('${m.id}')" ${allHaveTgl ? '' : 'disabled title="Isi Tanggal Lahir semua anak di pernikahan ini dulu"'}>Urutkan otomatis berdasarkan Tanggal Lahir</button><br>`
+      : '';
+
+    const chips = childIds.map((cid, idx) => {
+      const c = allPeople.find(p => p.id === cid);
+      const nama = c ? c.nama : '(tidak ditemukan)';
+      const upBtn = idx > 0
+        ? `<button type="button" class="btn-reorder" title="Naikkan urutan" onclick="moveAnakUp('${m.id}','${cid}')">&uarr;</button>` : '';
+      const downBtn = idx < childIds.length - 1
+        ? `<button type="button" class="btn-reorder" title="Turunkan urutan" onclick="moveAnakDown('${m.id}','${cid}')">&darr;</button>` : '';
+      return `<span class="relation-chip"><span class="chip-sub">${idx + 1}.</span> ${escapeHtml(nama)} ${upBtn}${downBtn}</span>`;
+    }).join(' ');
+
+    return `<div class="relasi-anak-group">${groupLabel}${sortBtn}${chips}</div>`;
+  }).join('');
+}
+
+function moveAnakUp(marriageId, childId) {
+  return reorderAnak(marriageId, childId, -1);
+}
+function moveAnakDown(marriageId, childId) {
+  return reorderAnak(marriageId, childId, 1);
+}
+
+async function reorderAnak(marriageId, childId, direction) {
+  const m = allMarriages.find(x => x.id === marriageId);
+  if (!m) return;
+  const ids = [...(m.childIds || [])];
+  const idx = ids.indexOf(childId);
+  const swapWith = idx + direction;
+  if (idx < 0 || swapWith < 0 || swapWith >= ids.length) return;
+  [ids[idx], ids[swapWith]] = [ids[swapWith], ids[idx]];
+  await MarriageAPI.setChildOrder(marriageId, ids);
+  await refreshRelasiData();
+}
+
+// Urutkan childIds satu pernikahan berdasarkan Tanggal Lahir (hanya bisa
+// dipanggil kalau semua anak di pernikahan itu sudah punya Tanggal Lahir --
+// lihat pengecekan `allHaveTgl` di renderAnakSection).
+async function autoSortAnakByTglLahir(marriageId) {
+  const m = allMarriages.find(x => x.id === marriageId);
+  if (!m) return;
+  const ids = [...(m.childIds || [])];
+  const withDates = ids.map(cid => ({ id: cid, tgl: (allPeople.find(p => p.id === cid) || {}).tglLahir }));
+  if (withDates.some(x => !x.tgl)) return; // jaga-jaga kalau tombol somehow ke-klik saat tidak lengkap
+  withDates.sort((a, b) => new Date(a.tgl) - new Date(b.tgl));
+  await MarriageAPI.setChildOrder(marriageId, withDates.map(x => x.id));
+  await refreshRelasiData();
 }
 
 async function refreshRelasiData() {

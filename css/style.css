@@ -747,6 +747,10 @@ body.public-custom-bg {
 }
 .chip-sub { color: var(--text-muted); font-size: 11px; }
 .relation-chip button { background: none; border: none; color: var(--blue-deep); cursor: pointer; font-weight: bold; }
+.btn-reorder { background: none; border: 1px solid var(--blue-deep); border-radius: 4px; color: var(--blue-deep); cursor: pointer; font-weight: bold; font-size: 11px; line-height: 1; padding: 2px 5px; margin: 0 1px; }
+.btn-reorder:hover { background: var(--blue-deep); color: #fff; }
+.relasi-anak-group { margin-bottom: 12px; }
+.relasi-anak-group-label { font-size: 12.5px; color: var(--text-muted); margin: 0 0 6px 0; font-weight: 600; }
 .add-relation-row { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 .add-relation-row select { flex: 1; min-width: 140px; margin-bottom: 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; }
 

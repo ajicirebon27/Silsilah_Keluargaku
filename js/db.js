@@ -212,6 +212,24 @@ const MarriageAPI = {
       childIds: firebase.firestore.FieldValue.arrayRemove(childId)
     });
   },
+  // Timpa TOTAL urutan childIds satu pernikahan (bukan arrayUnion/arrayRemove
+  // yang cuma menambah/mengurangi) -- dipakai utk fitur naik/turun urutan
+  // anak & urutkan-otomatis-berdasarkan-tanggal-lahir. Isi array harus
+  // orang yang sama persis, cuma urutannya yang beda.
+  async setChildOrder(marriageId, orderedChildIds) {
+    await db.collection('marriages').doc(marriageId).update({ childIds: orderedChildIds });
+  },
+  // Tukar angka `urutanPasangan` antara 2 pernikahan sekaligus (1 batch
+  // write) -- dipakai utk fitur naik/turun urutan istri/suami. Ditukar
+  // bersamaan (bukan 2 update terpisah) supaya tidak pernah ada momen di
+  // mana 2 pernikahan kebetulan punya urutanPasangan sama akibat gagal di
+  // tengah jalan.
+  async swapUrutanPasangan(marriageIdA, urutanA, marriageIdB, urutanB) {
+    const batch = db.batch();
+    batch.update(db.collection('marriages').doc(marriageIdA), { urutanPasangan: urutanB });
+    batch.update(db.collection('marriages').doc(marriageIdB), { urutanPasangan: urutanA });
+    await batch.commit();
+  },
   // Cari pernikahan persis antara 2 orang tertentu (urutan tidak masalah).
   // Kalau salah satu null (orang tua tunggal), cari yang cocok dengan pola itu.
   findBetween(marriages, idA, idB) {
