@@ -116,8 +116,20 @@
       </div>
       <div id="relasi-filter-summary" class="relasi-filter-summary"></div>
       <p id="gender-invalid-warning" class="gender-invalid-warning"></p>
+      <div id="bulk-action-bar" class="bulk-action-bar" style="display:none">
+        <span id="bulk-selected-count" class="bulk-selected-count"></span>
+        <button type="button" id="bulk-select-all-filtered" class="bulk-link-btn"></button>
+        <span class="bulk-action-spacer"></span>
+        <button type="button" id="bulk-btn-edit" class="btn-aksi btn-aksi-edit">Edit</button>
+        <button type="button" id="bulk-btn-relasi" class="btn-aksi btn-aksi-relasi">Relasi</button>
+        <button type="button" id="bulk-btn-hapus" class="btn-aksi btn-aksi-hapus">Hapus</button>
+        <button type="button" id="bulk-btn-clear" class="bulk-clear-btn" title="Batalkan pilihan">✕ Batalkan</button>
+      </div>
       <table class="admin-table">
-        <thead><tr><th>Nama</th><th>Jenis Kelamin</th><th>Lahir</th><th>Wafat</th><th>Aksi</th></tr></thead>
+        <thead><tr>
+          <th class="checkbox-cell"><input type="checkbox" id="select-all-checkbox" title="Pilih semua"></th>
+          <th>Nama</th><th>Jenis Kelamin</th><th>Lahir</th><th>Wafat</th><th>Aksi</th>
+        </tr></thead>
         <tbody id="people-table-body"></tbody>
       </table>
       <div id="people-pagination" class="pagination-wrap"></div>

@@ -12,6 +12,8 @@ const PEOPLE_PAGE_SIZE = 20;
 let currentPeopleFilter = '';
 let currentPeoplePage = 1;
 let currentRelasiFilter = 'all'; // 'all' | 'sudah' | 'belum'
+let selectedPersonIds = new Set();   // id orang yang dicentang di tab Data Orang
+let currentFilteredPersonIds = [];   // semua id yang cocok dgn pencarian + filter (semua halaman)
 
 const authScreen = document.getElementById('auth-screen');
 const adminApp = document.getElementById('admin-app');
@@ -368,6 +370,13 @@ function renderPeopleTable(filter = currentPeopleFilter) {
   const startIdx = (currentPeoplePage - 1) * PEOPLE_PAGE_SIZE;
   const rows = filtered.slice(startIdx, startIdx + PEOPLE_PAGE_SIZE);
 
+  // Simpan daftar id yang cocok dgn pencarian+filter saat ini (semua halaman) --
+  // dipakai untuk fitur "pilih semua data" pada checkbox.
+  currentFilteredPersonIds = filtered.map(p => p.id);
+  // Buang seleksi id yang sudah tidak ada lagi di data (misal setelah dihapus)
+  const validIds = new Set(allPeople.map(p => p.id));
+  selectedPersonIds.forEach(id => { if (!validIds.has(id)) selectedPersonIds.delete(id); });
+
   tbody.innerHTML = rows.map(p => {
     const sudahRelasi = hasRelasiSet(p.id);
     const badge = sudahRelasi
@@ -377,8 +386,10 @@ function renderPeopleTable(filter = currentPeopleFilter) {
     const genderCell = genderValid
       ? escapeHtml(p.jenisKelamin)
       : `<span class="gender-invalid" title="Jenis kelamin kosong/tidak baku -- orang ini TIDAK akan pernah terdeteksi sebagai ayah/ibu di manapun sampai ini diperbaiki lewat tombol Edit">${escapeHtml(p.jenisKelamin || '(kosong)')} ⚠️</span>`;
+    const checked = selectedPersonIds.has(p.id) ? 'checked' : '';
     return `
-    <tr>
+    <tr class="${checked ? 'row-selected' : ''}">
+      <td class="checkbox-cell"><input type="checkbox" class="row-select-checkbox" data-id="${p.id}" ${checked}></td>
       <td>${escapeHtml(p.nama)}${badge}</td>
       <td>${genderCell}</td>
       <td>${formatDate(p.tglLahir)}</td>
@@ -390,7 +401,7 @@ function renderPeopleTable(filter = currentPeopleFilter) {
       </td>
     </tr>
   `;
-  }).join('') || `<tr><td colspan="5" class="empty-row">${
+  }).join('') || `<tr><td colspan="6" class="empty-row">${
     currentRelasiFilter === 'all' ? 'Belum ada data.' :
     currentRelasiFilter === 'sudah' ? 'Belum ada data yang sudah terelasi.' :
     'Semua data sudah terelasi. 🎉'
@@ -399,6 +410,107 @@ function renderPeopleTable(filter = currentPeopleFilter) {
   renderGenderInvalidWarning();
   renderPeoplePagination(totalCount, totalPages);
   renderRelasiFilterSummary(searched.length, sudahCount, belumCount);
+  document.querySelectorAll('.row-select-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      toggleRowSelect(cb.dataset.id, cb.checked);
+    });
+  });
+  syncSelectAllCheckbox();
+  renderBulkActionBar();
+}
+
+// ----------------------------------------------------------------------
+// Seleksi checkbox (bulk actions: edit / relasi / hapus)
+// ----------------------------------------------------------------------
+
+function toggleRowSelect(id, checked) {
+  if (checked) selectedPersonIds.add(id); else selectedPersonIds.delete(id);
+  const tr = document.querySelector(`.row-select-checkbox[data-id="${id}"]`)?.closest('tr');
+  if (tr) tr.classList.toggle('row-selected', checked);
+  syncSelectAllCheckbox();
+  renderBulkActionBar();
+}
+
+function syncSelectAllCheckbox() {
+  const headerCb = document.getElementById('select-all-checkbox');
+  if (!headerCb) return;
+  const rowCbs = Array.from(document.querySelectorAll('.row-select-checkbox'));
+  if (rowCbs.length === 0) { headerCb.checked = false; headerCb.indeterminate = false; return; }
+  const checkedCount = rowCbs.filter(cb => selectedPersonIds.has(cb.dataset.id)).length;
+  headerCb.checked = checkedCount === rowCbs.length;
+  headerCb.indeterminate = checkedCount > 0 && checkedCount < rowCbs.length;
+}
+
+// Klik checkbox di header tabel: pilih/batalkan semua baris yang TAMPIL di halaman ini.
+function toggleSelectAllOnPage(checked) {
+  document.querySelectorAll('.row-select-checkbox').forEach(cb => {
+    cb.checked = checked;
+    if (checked) selectedPersonIds.add(cb.dataset.id); else selectedPersonIds.delete(cb.dataset.id);
+    cb.closest('tr')?.classList.toggle('row-selected', checked);
+  });
+  syncSelectAllCheckbox();
+  renderBulkActionBar();
+}
+
+// Pilih SEMUA data hasil pencarian/filter saat ini (bukan cuma halaman yang tampil).
+function selectAllFilteredPeople() {
+  currentFilteredPersonIds.forEach(id => selectedPersonIds.add(id));
+  renderPeopleTable();
+}
+
+function clearPeopleSelection() {
+  selectedPersonIds.clear();
+  renderPeopleTable();
+}
+
+function renderBulkActionBar() {
+  const bar = document.getElementById('bulk-action-bar');
+  if (!bar) return;
+  const count = selectedPersonIds.size;
+  const totalFiltered = currentFilteredPersonIds.length;
+
+  if (count === 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+
+  document.getElementById('bulk-selected-count').textContent = `✅ ${count} dipilih`;
+
+  const linkBtn = document.getElementById('bulk-select-all-filtered');
+  if (count < totalFiltered) {
+    linkBtn.textContent = `Pilih semua ${totalFiltered} data`;
+    linkBtn.style.display = '';
+  } else {
+    linkBtn.textContent = '';
+    linkBtn.style.display = 'none';
+  }
+
+  const btnEdit = document.getElementById('bulk-btn-edit');
+  const btnRelasi = document.getElementById('bulk-btn-relasi');
+  btnEdit.disabled = count !== 1;
+  btnRelasi.disabled = count !== 1;
+  btnEdit.title = count === 1 ? '' : 'Pilih tepat 1 data untuk Edit';
+  btnRelasi.title = count === 1 ? '' : 'Pilih tepat 1 data untuk atur Relasi';
+  btnEdit.style.opacity = count === 1 ? '1' : '0.5';
+  btnRelasi.style.opacity = count === 1 ? '1' : '0.5';
+  btnEdit.style.cursor = count === 1 ? 'pointer' : 'not-allowed';
+  btnRelasi.style.cursor = count === 1 ? 'pointer' : 'not-allowed';
+}
+
+async function bulkDeleteSelected() {
+  const ids = Array.from(selectedPersonIds);
+  if (ids.length === 0) return;
+  const names = allPeople.filter(p => ids.includes(p.id)).map(p => p.nama);
+  const preview = names.slice(0, 8).join(', ') + (names.length > 8 ? `, dan ${names.length - 8} lainnya` : '');
+  const ok = confirm(
+    `Pindahkan ${ids.length} orang ke Sampah?\n\n${preview}\n\n` +
+    `Data TIDAK langsung hilang -- bisa dipulihkan kapan saja lewat tab Sampah.`
+  );
+  if (!ok) return;
+  for (const id of ids) {
+    await PeopleAPI.delete(id);
+  }
+  selectedPersonIds.clear();
+  await refreshAll();
+  await refreshTrashBadge();
 }
 
 function renderGenderInvalidWarning() {
@@ -501,6 +613,21 @@ document.getElementById('admin-relasi-filter').addEventListener('change', e => {
   setRelasiFilter(e.target.value);
 });
 document.getElementById('btn-add-person').addEventListener('click', () => openPersonForm(null));
+
+document.getElementById('select-all-checkbox').addEventListener('change', e => {
+  toggleSelectAllOnPage(e.target.checked);
+});
+document.getElementById('bulk-select-all-filtered').addEventListener('click', selectAllFilteredPeople);
+document.getElementById('bulk-btn-clear').addEventListener('click', clearPeopleSelection);
+document.getElementById('bulk-btn-hapus').addEventListener('click', bulkDeleteSelected);
+document.getElementById('bulk-btn-edit').addEventListener('click', () => {
+  if (selectedPersonIds.size !== 1) return;
+  openEditPerson(Array.from(selectedPersonIds)[0]);
+});
+document.getElementById('bulk-btn-relasi').addEventListener('click', () => {
+  if (selectedPersonIds.size !== 1) return;
+  openRelasiModal(Array.from(selectedPersonIds)[0]);
+});
 
 function setupPersonModal() {
   document.getElementById('person-modal-close').addEventListener('click', closePersonForm);
