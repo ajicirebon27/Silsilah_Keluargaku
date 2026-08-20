@@ -255,11 +255,12 @@ const TreeControls = {
   // Dipakai fitur "Cari Sub Keluarga": user cari 1 nama, lalu pohon yang
   // digambar dipersempit HANYA jadi -- pasangan orang itu (semua
   // pernikahannya, mendukung poligami), anak-anaknya, menantu (pasangan si
-  // anak, supaya garis pernikahan ke cucu bisa digambar), dan cucu-cucunya.
-  // TIDAK melebar ke leluhur (orang tua ke atas) maupun ke buyut/generasi
-  // sesudah cucu -- beda dgn mode collapse/expand biasa yg cuma
-  // menyembunyikan sementara tapi datanya tetap "ada" di baliknya, di sini
-  // datanya sendiri yg dipotong sebelum dikirim ke renderTreeSVG().
+  // anak, supaya garis pernikahan ke cucu bisa digambar), cucu-cucunya, dan
+  // pasangan cucu (menantu-cucu, supaya garis pernikahan cucu ikut
+  // tergambar). TIDAK melebar ke leluhur (orang tua ke atas) maupun ke
+  // cicit/generasi sesudah cucu -- beda dgn mode collapse/expand biasa yg
+  // cuma menyembunyikan sementara tapi datanya tetap "ada" di baliknya, di
+  // sini datanya sendiri yg dipotong sebelum dikirim ke renderTreeSVG().
   buildSubFamily(people, marriages, personId) {
     // Lapis 0: orang yg dicari + seluruh pasangannya (bisa >1 kalau poligami).
     const level0 = new Set([personId]);
@@ -281,13 +282,22 @@ const TreeControls = {
       if (m.orangId2) level1Spouses.add(m.orangId2);
     });
 
-    // Lapis 2: cucu -- anak dari pernikahan level1. Sengaja TIDAK ditelusuri
-    // lebih jauh (tidak ambil pasangan cucu / anak cucu) supaya batasnya
-    // benar-benar berhenti di cucu sesuai permintaan fitur ini.
+    // Lapis 2: cucu -- anak dari pernikahan level1.
     const level2 = new Set();
     level1Marriages.forEach(m => (m.childIds || []).forEach(cid => level2.add(cid)));
 
-    const idSet = new Set([...level0, ...level1, ...level1Spouses, ...level2]);
+    // Pasangan cucu (menantu-cucu), mis. suami/istri dari cucu -- diikutkan
+    // supaya relasi pernikahan cucu ikut tergambar. TIDAK ditelusuri lebih
+    // jauh lagi (tidak ambil anak dari pernikahan level2 / cicit) supaya
+    // batasnya tetap berhenti di generasi cucu, cuma pasangannya saja yg ikut.
+    const level2Marriages = marriages.filter(m => level2.has(m.orangId1) || level2.has(m.orangId2));
+    const level2Spouses = new Set();
+    level2Marriages.forEach(m => {
+      if (m.orangId1) level2Spouses.add(m.orangId1);
+      if (m.orangId2) level2Spouses.add(m.orangId2);
+    });
+
+    const idSet = new Set([...level0, ...level1, ...level1Spouses, ...level2, ...level2Spouses]);
 
     const subPeople = people.filter(p => idSet.has(p.id));
     const subMarriages = marriages
