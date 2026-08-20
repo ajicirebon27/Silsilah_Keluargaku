@@ -912,7 +912,7 @@ function renderPasanganSection(person) {
     !RelationRules.isBloodRelated(person.id, p.id, allPeople, allMarriages)
   );
 
-  pasanganSelectWidget.setOptions(candidates.map(p => ({ value: p.id, label: p.nama })));
+  pasanganSelectWidget.setOptions(candidates.map(p => ({ value: p.id, label: p.nama, sublabel: buildPersonPickerSublabel(p) })));
   pasanganSelectWidget.setValue('', true);
 
   const hiddenCount = allPeople.filter(p => p.id !== person.id && p.jenisKelamin === oppositeGender).length - candidates.length;
@@ -1007,12 +1007,38 @@ function getRecordedSpouseIds(personId) {
     .filter(Boolean);
 }
 
+// Baris keterangan pembeda yang ditampilkan di bawah tiap nama pada dropdown
+// pencarian orang (Pasangan/Ayah/Ibu di modal Relasi). Kalau ada beberapa
+// orang dengan nama sama/mirip (mis. 2 orang bernama "Dewi"), admin bisa
+// langsung melihat tanggal lahir, orang tua yang sudah tercatat, dan status
+// pasangan (sudah/belum) tanpa perlu membuka data masing-masing orang dulu --
+// supaya tidak salah pilih. Dipakai bersama notif ambiguitas nama di
+// js/searchable-select.js (muncul otomatis begitu ketikan cocok dgn >1 orang).
+function buildPersonPickerSublabel(person) {
+  const parts = [];
+  if (person.tglLahir) parts.push(`lahir ${formatDate(person.tglLahir)}`);
+
+  const { ayah, ibu } = RelationRules.getParents(person.id, allPeople, allMarriages);
+  const ortu = [ayah && ayah.nama, ibu && ibu.nama].filter(Boolean).join(' & ');
+  if (ortu) parts.push(`anak dari ${ortu}`);
+
+  const spouseNames = getRecordedSpouseIds(person.id)
+    .map(id => allPeople.find(p => p.id === id))
+    .filter(Boolean)
+    .map(p => p.nama);
+  parts.push(spouseNames.length > 0
+    ? `sudah berpasangan dengan ${spouseNames.join(', ')}`
+    : 'belum tercatat berpasangan');
+
+  return parts.join(' \u00b7 ');
+}
+
 function renderOrtuSection(person) {
   const { ayah, ibu } = RelationRules.getParents(person.id, allPeople, allMarriages);
   const { ayahCandidates, ibuCandidates } = getOrtuCandidates(person);
 
-  ayahSelectWidget.setOptions(ayahCandidates.map(p => ({ value: p.id, label: p.nama })));
-  ibuSelectWidget.setOptions(ibuCandidates.map(p => ({ value: p.id, label: p.nama })));
+  ayahSelectWidget.setOptions(ayahCandidates.map(p => ({ value: p.id, label: p.nama, sublabel: buildPersonPickerSublabel(p) })));
+  ibuSelectWidget.setOptions(ibuCandidates.map(p => ({ value: p.id, label: p.nama, sublabel: buildPersonPickerSublabel(p) })));
   ayahSelectWidget.setValue(ayah ? ayah.id : '', true);
   ibuSelectWidget.setValue(ibu ? ibu.id : '', true);
 
@@ -1052,7 +1078,7 @@ function applyOrtuCascade(changedSide, personOverride) {
       const wivesOnly = ibuCandidates.filter(p => wivesIds.has(p.id));
       if (wivesOnly.length > 0) options = wivesOnly;
     }
-    ibuSelectWidget.setOptions(options.map(p => ({ value: p.id, label: p.nama })));
+    ibuSelectWidget.setOptions(options.map(p => ({ value: p.id, label: p.nama, sublabel: buildPersonPickerSublabel(p) })));
   } else {
     const ibuId = ibuSelectWidget.getValue();
     let options = ayahCandidates;
@@ -1061,7 +1087,7 @@ function applyOrtuCascade(changedSide, personOverride) {
       const husbandsOnly = ayahCandidates.filter(p => husbandsIds.has(p.id));
       if (husbandsOnly.length > 0) options = husbandsOnly;
     }
-    ayahSelectWidget.setOptions(options.map(p => ({ value: p.id, label: p.nama })));
+    ayahSelectWidget.setOptions(options.map(p => ({ value: p.id, label: p.nama, sublabel: buildPersonPickerSublabel(p) })));
   }
 }
 

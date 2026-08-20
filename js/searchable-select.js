@@ -11,9 +11,18 @@
 //     emptyOptionLabel: 'Tidak diketahui', // null = tanpa opsi kosong
 //     onChange: (value) => { ... }
 //   });
-//   s.setOptions([{ value: 'id1', label: 'Nama 1' }, ...]);
+//   s.setOptions([{ value: 'id1', label: 'Nama 1', sublabel: 'lahir 12 Mei 1980 ...' }, ...]);
 //   s.setValue('id1');       // set terpilih tanpa memicu onChange
 //   s.getValue();            // 'id1'
+//
+// `sublabel` (opsional per-item) -- baris keterangan kecil yang tampil di
+// bawah nama pada tiap baris hasil pencarian (mis. tanggal lahir, orang tua
+// yang sudah tercatat, status pasangan). Tujuannya supaya kalau ada beberapa
+// orang dengan nama yang sama/mirip (mis. 2 "Dewi" berbeda), admin punya
+// info pembeda langsung di tempat tanpa harus buka data masing-masing dulu.
+// Saat query yang diketik cocok dengan lebih dari 1 orang, panel juga
+// menampilkan notif kecil di atas daftar supaya admin sadar perlu mengecek
+// keterangan tsb sebelum memilih.
 //
 // Panel daftar hasil pencarian SENGAJA di-"portal"-kan ke <body> (posisi
 // fixed, dihitung ulang tiap dibuka/discroll) alih-alih anak langsung dari
@@ -123,9 +132,25 @@ class SearchableSelect {
   _renderList(query) {
     const entries = this._matchEntries(query);
     this._entries = entries;
-    this.panelEl.innerHTML = entries.length
-      ? entries.map((e, i) => `<div class="ss-item ${e.value === this.value ? 'ss-item-selected' : ''}" data-idx="${i}">${ssEscapeHtml(e.label)}</div>`).join('')
+
+    // Notif ambiguitas nama: kalau yang diketik cocok dengan >1 orang (di
+    // luar opsi "kosong"), ingatkan admin supaya mengecek keterangan pembeda
+    // tiap baris (tanggal lahir/ortu/pasangan) sebelum memilih -- supaya
+    // tidak salah pilih di antara nama yang sama/mirip.
+    const q = (query || '').trim();
+    const realMatches = entries.filter(e => e.value !== '');
+    const notice = (q && realMatches.length > 1)
+      ? `<div class="ss-notice">Ditemukan ${realMatches.length} orang dengan nama mengandung "${ssEscapeHtml(q)}" -- cek keterangan di bawah tiap nama supaya tidak salah pilih.</div>`
+      : '';
+
+    const list = entries.length
+      ? entries.map((e, i) => `<div class="ss-item ${e.value === this.value ? 'ss-item-selected' : ''}" data-idx="${i}">
+          <div class="ss-item-label">${ssEscapeHtml(e.label)}</div>
+          ${e.sublabel ? `<div class="ss-item-sublabel">${ssEscapeHtml(e.sublabel)}</div>` : ''}
+        </div>`).join('')
       : `<div class="ss-empty">Tidak ditemukan.</div>`;
+
+    this.panelEl.innerHTML = notice + list;
     this.panelEl.querySelectorAll('.ss-item').forEach(el => {
       el.addEventListener('mousedown', (ev) => {
         ev.preventDefault(); // cegah blur duluan sebelum klik diproses

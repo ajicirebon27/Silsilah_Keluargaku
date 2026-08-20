@@ -999,7 +999,25 @@ h2, h3 { color: var(--text-main); }
 }
 .ss-item:hover, .ss-item-active { background: var(--blue-pale); }
 .ss-item-selected { font-weight: 600; color: var(--blue-deep); }
+.ss-item-label { line-height: 1.3; }
+/* Keterangan pembeda (tanggal lahir/ortu/pasangan) di bawah tiap nama --
+   membantu admin memilih orang yang tepat kalau ada nama yang sama/mirip. */
+.ss-item-sublabel {
+  font-size: 11.5px; color: var(--text-muted); margin-top: 2px; line-height: 1.3;
+  font-weight: 400;
+}
+.ss-item-selected .ss-item-sublabel { color: var(--blue-deep); opacity: 0.85; }
 .ss-empty { padding: 8px 10px; font-size: 13px; color: var(--text-muted); }
+/* Notif kecil saat pencarian nama cocok dgn >1 orang -- lihat searchable-select.js */
+.ss-notice {
+  background: var(--bg-soft, #f4f6f8);
+  border: 1px solid var(--border, #e2e6ea);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+}
 
 /* ---------- Dashboard ---------- */
 .dashboard-grid {
