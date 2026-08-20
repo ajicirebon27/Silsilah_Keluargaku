@@ -703,6 +703,23 @@ form label { font-size: 13px; font-weight: 500; color: var(--text-muted); displa
   color: #fff; cursor: pointer; padding: 6px 10px;
 }
 
+/* ---------- Indikator status offline ---------- */
+.offline-status-banner {
+  position: fixed;
+  left: 12px; right: 12px; top: 12px;
+  max-width: 480px;
+  margin: 0 auto;
+  z-index: 400;
+  background: #4a3410;
+  color: #fff;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+
 /* ---------- Setting: Background tampilan publik ---------- */
 .bg-sub-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin: 0 0 6px; }
 .bg-current-preview {

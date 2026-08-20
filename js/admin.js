@@ -1490,6 +1490,92 @@ function setupSettings() {
   const importInput = document.getElementById('import-file-input');
   document.getElementById('btn-import').addEventListener('click', () => importInput.click());
   importInput.addEventListener('change', handleImportFile);
+
+  document.getElementById('btn-export-gedcom').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-export-gedcom');
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Menyiapkan...';
+    try {
+      const [people, marriages] = await Promise.all([PeopleAPI.getAll(), MarriageAPI.getAll()]);
+      const text = GedcomAPI.toText(people, marriages);
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `silsilah-${new Date().toISOString().slice(0, 10)}.ged`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showGedcomFeedback(`Berhasil mengekspor ${people.length} orang & ${marriages.length} pernikahan ke file GEDCOM.`);
+    } catch (err) {
+      showGedcomFeedback('Gagal mengekspor GEDCOM: ' + err.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
+  });
+
+  const importGedcomInput = document.getElementById('import-gedcom-input');
+  document.getElementById('btn-import-gedcom').addEventListener('click', () => importGedcomInput.click());
+  importGedcomInput.addEventListener('change', handleImportGedcomFile);
+}
+
+async function handleImportGedcomFile(e) {
+  const file = e.target.files[0];
+  e.target.value = ''; // supaya bisa pilih file yang sama lagi kalau perlu
+  if (!file) return;
+
+  let text;
+  try {
+    text = await file.text();
+  } catch (err) {
+    showGedcomFeedback('Gagal membaca file.', true);
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = GedcomAPI.parse(text);
+  } catch (err) {
+    showGedcomFeedback('File GEDCOM tidak valid atau gagal diparse: ' + err.message, true);
+    return;
+  }
+
+  const { indis, fams } = parsed;
+  if (indis.length === 0) {
+    showGedcomFeedback('File ini tidak berisi data orang (INDI) yang bisa dibaca. Pastikan ini file GEDCOM (.ged) yang valid.', true);
+    return;
+  }
+
+  const genderKosong = indis.filter(p => !p.jenisKelamin).length;
+  const catatanGender = genderKosong > 0
+    ? `\n\n⚠️ ${genderKosong} dari data orang di file ini tidak punya jenis kelamin yang terbaca (field SEX kosong/bukan M atau F) -- mereka tidak akan terdeteksi sebagai ayah/ibu sampai diperbaiki manual lewat Edit setelah impor.`
+    : '';
+
+  const ok = confirm(
+    `File ini berisi ${indis.length} data orang dan ${fams.length} data keluarga (pernikahan).\n\n` +
+    `Semua akan ditambahkan sebagai data BARU (tidak menimpa data yang sudah ada di database). ` +
+    `Kalau ada kemungkinan sebagian orang ini sudah tercatat sebelumnya, akan ada data ganda -- cek & gabungkan manual lewat tab Data Orang setelah ini. Proses ini tidak bisa dibatalkan.` +
+    catatanGender +
+    `\n\nLanjutkan impor sekarang?`
+  );
+  if (!ok) return;
+
+  showGedcomFeedback('Sedang mengimpor data, mohon tunggu...');
+  try {
+    const result = await GedcomAPI.importToFirestore(indis, fams);
+    await refreshAll();
+    await refreshCommentBadge();
+    showGedcomFeedback(`Berhasil mengimpor ${result.peopleCount} orang & ${result.marriageCount} pernikahan dari file GEDCOM.`);
+  } catch (err) {
+    showGedcomFeedback('Gagal mengimpor GEDCOM: ' + err.message, true);
+  }
+}
+
+function showGedcomFeedback(msg, isError = false) {
+  const el = document.getElementById('gedcom-feedback');
+  el.textContent = msg;
+  el.className = 'comment-feedback ' + (isError ? 'error' : 'success');
 }
 
 // ======================================================================

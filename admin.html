@@ -321,6 +321,36 @@
           </div>
         </details>
 
+        <!-- GRUP: GEDCOM (tukar-menukar data dgn aplikasi silsilah lain) -->
+        <details class="setting-group">
+          <summary class="setting-group-header">
+            <span class="setting-group-icon" aria-hidden="true">🌳</span>
+            <div>
+              <h3>Ekspor / Impor GEDCOM</h3>
+              <p class="setting-group-desc">Format standar silsilah keluarga, bisa dibuka di Ancestry, MyHeritage, FamilySearch, Gramps, dll.</p>
+            </div>
+            <span class="setting-group-chevron" aria-hidden="true">▾</span>
+          </summary>
+          <div class="setting-group-body">
+
+            <div class="setting-field">
+              <label>Ekspor ke GEDCOM (.ged)</label>
+              <p class="setting-hint">Unduh seluruh data orang & pernikahan dalam format GEDCOM standar -- berguna untuk dibuka di aplikasi silsilah lain, atau sebagai arsip jangka panjang yang tidak terikat ke aplikasi ini.</p>
+              <button id="btn-export-gedcom" class="btn-secondary">Export GEDCOM (.ged)</button>
+            </div>
+
+            <div class="setting-field">
+              <label>Impor dari GEDCOM (.ged)</label>
+              <p class="setting-hint">Masukkan data dari file GEDCOM yang diekspor aplikasi silsilah lain. Semua orang & pernikahan di file akan <strong>ditambahkan sebagai data baru</strong> (tidak menimpa data yang sudah ada) -- cek & rapikan lagi lewat tab Data Orang setelah impor, terutama kalau ada kemungkinan duplikat dengan data yang sudah ada.</p>
+              <p class="setting-hint">Catatan: hanya field dasar yang didukung (nama, jenis kelamin, tanggal/tempat lahir, tanggal wafat, agama, pekerjaan, alamat, catatan, relasi ayah/ibu/anak). Foto, sumber (citation), dan media dari file GEDCOM tidak ikut terbawa.</p>
+              <input type="file" id="import-gedcom-input" accept=".ged,text/plain" style="display:none">
+              <button id="btn-import-gedcom" class="btn-secondary">Import GEDCOM (.ged)</button>
+            </div>
+
+            <p id="gedcom-feedback" class="comment-feedback"></p>
+          </div>
+        </details>
+
       </div>
     </section>
 

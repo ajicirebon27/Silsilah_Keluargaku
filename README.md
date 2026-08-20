@@ -1,5 +1,42 @@
 # Silsilah Keluarga — Panduan Setup
 
+> **Baru di versi ini (v19) -- PWA benar-benar bisa dipakai offline, & Ekspor/Impor GEDCOM:**
+> 1. **Data pohon keluarga kini tersimpan offline di perangkat.** Sebelumnya
+>    service worker cuma menyimpan file HTML/CSS/JS (cangkang aplikasi) --
+>    aplikasi bisa "dibuka" tanpa internet, tapi datanya sendiri (orang,
+>    pernikahan) gagal dimuat sama sekali karena tidak pernah disimpan lokal.
+>    Sekarang Firestore diaktifkan mode **cache offline** (`enablePersistence()`
+>    di `js/firebase-config.js`): begitu data pernah berhasil dimuat sekali
+>    selagi online, ia tersimpan di perangkat dan tetap bisa dibuka/dilihat
+>    walau sinyal hilang total (mis. di rumah keluarga yang susah sinyal).
+>    Ada juga bar kecil di layar yang muncul otomatis saat koneksi
+>    terputus, supaya jelas kapan yang dilihat adalah data tersimpan
+>    terakhir. Daftar file yang dicache app-shell juga dilengkapi (`admin.html`,
+>    `js/admin.js`, ikon, dll -- sebelumnya sebagian file ini tidak ikut
+>    dicache, jadi panel admin gagal dibuka sama sekali saat offline).
+> 2. **Ekspor & Impor GEDCOM (`.ged`) -- baru.** Tab **Setting** (admin)
+>    sekarang punya grup pengaturan baru "Ekspor / Impor GEDCOM". GEDCOM
+>    adalah format standar industri untuk data silsilah keluarga, dipakai
+>    hampir semua aplikasi genealogi (Ancestry, MyHeritage, FamilySearch,
+>    Gramps, dll). Ini melengkapi Export/Import JSON yang sudah ada
+>    sebelumnya (yang formatnya khusus milik aplikasi ini sendiri, tidak
+>    bisa dibuka aplikasi lain):
+>    - **Export GEDCOM**: mengunduh seluruh data orang & pernikahan sebagai
+>      file `.ged` standar -- bisa dibuka di aplikasi genealogi lain, atau
+>      disimpan sebagai arsip jangka panjang yang tidak terikat ke aplikasi
+>      ini.
+>    - **Import GEDCOM**: memasukkan data dari file `.ged` yang berasal dari
+>      aplikasi lain. Semua orang & keluarga di file **selalu ditambahkan
+>      sebagai data baru** (tidak pernah menimpa data yang sudah ada,
+>      berbeda dengan Import JSON) -- kalau ada kemungkinan orang yang sama
+>      sudah tercatat sebelumnya, perlu dicek & digabung manual lewat tab
+>      Data Orang setelah impor.
+>    - Cakupan field yang didukung: nama, jenis kelamin, tanggal/tempat
+>      lahir, tanggal wafat, agama, pekerjaan, alamat, catatan, dan relasi
+>      ayah/ibu/anak (FAM/HUSB/WIFE/CHIL). Foto dan sumber (citation) dari
+>      file GEDCOM lain tidak ikut terbawa -- di luar cakupan versi ini.
+>    - Logika ada di `GedcomAPI` (`js/db.js`).
+
 > **Baru di versi ini (v18) -- Unduh Pohon Keluarga sebagai JPG/PDF diperbaiki & dilengkapi:**
 > Sebelumnya tombol Unduh JPG/PDF (admin) sudah ada tapi punya beberapa
 > celah: kalau ada cabang yang sedang diciutkan, hasil unduhan cuma

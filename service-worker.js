@@ -1,13 +1,25 @@
-const CACHE_NAME = 'silsilah-cache-v7';
+// v8: lengkapi daftar cache -- sebelumnya admin.html & sejumlah file JS/ikon
+// TIDAK ikut dicache, jadi panel admin (dan ikon PWA) gagal terbuka sama
+// sekali saat offline walau tampilan publik sudah bisa. Sekarang app-shell
+// (semua file statis) benar-benar lengkap, supaya baik tampilan publik
+// maupun admin bisa dibuka offline (data orang/pernikahan sendiri diambil
+// dari cache Firestore -- lihat enablePersistence() di js/firebase-config.js).
+const CACHE_NAME = 'silsilah-cache-v8';
 const ASSETS = [
   './',
   './index.html',
+  './admin.html',
   './css/style.css',
   './js/firebase-config.js',
   './js/db.js',
+  './js/birthday.js',
   './js/tree.js',
   './js/app.js',
-  './manifest.json'
+  './js/admin.js',
+  './js/searchable-select.js',
+  './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
 self.addEventListener('install', event => {
@@ -26,9 +38,18 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// Strategi: coba jaringan dulu (data selalu terbaru), fallback ke cache jika offline
+// Strategi: coba jaringan dulu (data selalu terbaru), fallback ke cache jika offline.
+// PENTING: hanya dipakai utk file statis app-shell milik situs sendiri
+// (same-origin). Request ke Firestore (firestore.googleapis.com) & CDN
+// Firebase (gstatic.com) SENGAJA dibiarkan lewat apa adanya (tidak
+// di-intercept) -- kalau ikut dicegat lalu gagal fallback ke cache (tidak
+// ada di cache), service worker bisa mengembalikan respons rusak yang
+// malah mengacaukan mekanisme retry/offline bawaan Firestore SDK, yang
+// sudah punya cara sendiri yang lebih andal menangani koneksi terputus
+// (lihat enablePersistence() di js/firebase-config.js).
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     fetch(event.request)
       .then(res => {

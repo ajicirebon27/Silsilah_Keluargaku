@@ -90,6 +90,44 @@ function initDesktopModeNotice() {
 // dieksekusi, di kedua halaman (publik & admin).
 initDesktopModeNotice();
 
+// =====================================================================
+// INDIKATOR STATUS OFFLINE
+// Muncul sebagai bar kecil di bawah layar setiap kali `navigator.onLine`
+// mendeteksi koneksi terputus, dan hilang lagi begitu koneksi kembali.
+// Ini murni indikator UX -- pemuatan data itu sendiri sudah otomatis
+// jatuh ke cache Firestore (lihat `firebaseConfig.js` -> enablePersistence())
+// begitu offline, jadi tanpa bar ini pun aplikasi tetap bisa dipakai;
+// bar ini hanya supaya pengguna paham KENAPA data yang tampil mungkin
+// bukan yang paling baru (mis. komentar/data terbaru dari admin belum
+// tentu ikut ter-cache kalau belum pernah dimuat sebelumnya saat online).
+// =====================================================================
+function initOfflineStatusBanner() {
+  let bar = null;
+
+  function show() {
+    if (bar) return;
+    bar = document.createElement('div');
+    bar.className = 'offline-status-banner';
+    bar.innerHTML = firestoreOfflineReady
+      ? `📡 Sedang offline -- menampilkan data tersimpan terakhir di perangkat ini. Data terbaru akan otomatis dimuat begitu koneksi kembali.`
+      : `📡 Sedang offline -- data mungkin tidak bisa dimuat di perangkat/browser ini (cache offline tidak aktif).`;
+    document.body.appendChild(bar);
+  }
+  function hide() {
+    if (!bar) return;
+    bar.remove();
+    bar = null;
+  }
+
+  window.addEventListener('online', hide);
+  window.addEventListener('offline', show);
+  // Cek status begitu halaman dimuat (mis. dibuka langsung dalam keadaan offline).
+  firestoreOfflineReadyPromise.finally(() => {
+    if (!navigator.onLine) show();
+  });
+}
+initOfflineStatusBanner();
+
 // Pulihkan field bertipe Timestamp Firestore yang "rusak" jadi objek biasa
 // {seconds, nanoseconds} setelah lewat JSON.stringify/parse (dipakai saat restore backup).
 function restoreTimestampField(value) {
@@ -309,6 +347,336 @@ const CommentAPI = {
       waktuKirim: restoreTimestampField(c.waktuKirim)
     }));
     await writeInChunks(fixed, 'comments');
+  }
+};
+
+// =====================================================================
+// GEDCOM -- format standar pertukaran data silsilah keluarga (dipakai
+// Ancestry, MyHeritage, FamilySearch, Gramps, dll). Modul ini menangani
+// EXPORT (data kita -> file .ged) dan IMPORT (file .ged dari aplikasi
+// lain -> data kita). Cakupan yang didukung sengaja dibatasi ke tag-tag
+// paling umum & relevan dgn skema data kita (NAME, SEX, BIRT, DEAT, RELI,
+// OCCU, RESI/ADDR, NOTE, FAM dgn HUSB/WIFE/CHIL) -- bukan seluruh spek
+// GEDCOM 5.5.1 yang sangat luas (mis. sumber/citation, media, event
+// custom tidak didukung). Ini cukup utk kebutuhan tukar-menukar data
+// silsilah keluarga dasar antar aplikasi.
+// =====================================================================
+const GedcomAPI = {
+  MONTHS: ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'],
+  MAX_LINE: 200, // panjang aman per baris sebelum dipecah CONC (spek asli membatasi 255 char/baris)
+
+  // ---------- EXPORT ----------
+
+  // "1 JAN 1950" dari "1950-01-01". Kosong kalau format tanggal tidak lengkap
+  // (input HTML type=date kita selalu lengkap YYYY-MM-DD, jadi ini jarang terjadi).
+  _toGedcomDate(isoDate) {
+    if (!isoDate) return '';
+    const m = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return '';
+    const mi = parseInt(m[2], 10) - 1;
+    if (mi < 0 || mi > 11) return '';
+    return `${parseInt(m[3], 10)} ${this.MONTHS[mi]} ${m[1]}`;
+  },
+
+  // Bersihkan teks 1 baris: hilangkan newline asli (akan dipecah ulang via
+  // CONC/CONT sendiri) dan karakter "/" (berbenturan dgn delimiter NAME).
+  _clean(str) {
+    return String(str || '').replace(/\r?\n/g, ' ').replace(/\//g, '⁄').trim();
+  },
+
+  // Tulis 1 nilai teks (boleh panjang/mengandung newline asli) sbg baris
+  // GEDCOM level N + lanjutannya via CONC (potongan tanpa baris baru) &
+  // CONT (potongan dgn baris baru) -- supaya catatan/alamat panjang tetap
+  // utuh & sesuai spek (bukan 1 baris raksasa yang bisa ditolak parser lain).
+  _pushText(lines, level, tag, text) {
+    const raw = String(text || '').replace(/\//g, '⁄');
+    const parts = raw.split(/\r?\n/);
+    let first = true;
+    parts.forEach(part => {
+      let remaining = part;
+      let isFirstChunkOfPart = true;
+      do {
+        const chunk = remaining.slice(0, this.MAX_LINE);
+        remaining = remaining.slice(this.MAX_LINE);
+        // PENTING: jangan trim spasi di ujung `chunk` -- kalau teks aslinya
+        // kebetulan terpotong tepat di spasi (mis. "...dan tidak " | "merusak..."),
+        // spasi itu bagian dari isi asli dan wajib ikut tersimpan supaya saat
+        // disambung ulang oleh parser (CONC = concat tanpa baris baru) hasilnya
+        // tidak jadi "tidakmerusak" (2 kata menempel). Hanya dikosongkan
+        // sepenuhnya (tanpa spasi setelah tag) kalau chunk itu sendiri kosong.
+        if (first) {
+          lines.push(chunk ? `${level} ${tag} ${chunk}` : `${level} ${tag}`);
+          first = false;
+        } else if (isFirstChunkOfPart) {
+          lines.push(chunk ? `${level + 1} CONT ${chunk}` : `${level + 1} CONT`);
+        } else {
+          lines.push(chunk ? `${level + 1} CONC ${chunk}` : `${level + 1} CONC`);
+        }
+        isFirstChunkOfPart = false;
+      } while (remaining.length > 0);
+    });
+  },
+
+  // people/marriages: array yang sama seperti dipakai di seluruh aplikasi
+  // (hasil PeopleAPI.getAll() / MarriageAPI.getAll()). ID Firestore asli
+  // TIDAK dipakai langsung sbg pointer GEDCOM (@I...@) karena spek 5.5.1
+  // membatasi panjang pointer maks. 22 karakter -- ID Firestore (20
+  // karakter) + awalan/akhiran bisa melebihi itu. Dipetakan ke nomor urut
+  // sederhana (@I1@, @I2@, dst) supaya selalu sesuai spek & kompatibel
+  // dgn parser GEDCOM lain yang ketat.
+  toText(people, marriages) {
+    const lines = [];
+    lines.push('0 HEAD');
+    lines.push('1 SOUR Silsilah_Keluargaku');
+    lines.push('1 GEDC');
+    lines.push('2 VERS 5.5.1');
+    lines.push('2 FORM LINEAGE-LINKED');
+    lines.push('1 CHAR UTF-8');
+
+    const personIdx = new Map(); // firestoreId -> nomor urut
+    people.forEach((p, i) => personIdx.set(p.id, i + 1));
+    const famIdx = new Map();
+    marriages.forEach((m, i) => famIdx.set(m.id, i + 1));
+
+    const indiRef = id => personIdx.has(id) ? `@I${personIdx.get(id)}@` : null;
+    const famRef = id => `@F${famIdx.get(id)}@`;
+
+    const famsByPerson = {}; // personId -> [marriageId]
+    const famcByChild = {};  // childId -> marriageId (keluarga kandung; ambil yg pertama tercatat)
+    marriages.forEach(m => {
+      if (m.orangId1) (famsByPerson[m.orangId1] = famsByPerson[m.orangId1] || []).push(m.id);
+      if (m.orangId2) (famsByPerson[m.orangId2] = famsByPerson[m.orangId2] || []).push(m.id);
+      (m.childIds || []).forEach(cid => { if (!famcByChild[cid]) famcByChild[cid] = m.id; });
+    });
+
+    people.forEach(p => {
+      lines.push(`0 ${indiRef(p.id)} INDI`);
+      // Nama orang Indonesia umumnya tidak berformat "nama depan + marga",
+      // jadi seluruh nama dianggap "given name" & bagian marga dikosongkan
+      // (format standar "Given //" ini valid di spek & lazim dipakai utk
+      // budaya tanpa nama keluarga baku).
+      lines.push(`1 NAME ${this._clean(p.nama)}//`);
+      if (p.jenisKelamin === 'Laki-laki') lines.push('1 SEX M');
+      else if (p.jenisKelamin === 'Perempuan') lines.push('1 SEX F');
+      else lines.push('1 SEX U');
+      if (p.tglLahir || p.tempatLahir) {
+        lines.push('1 BIRT');
+        const gd = this._toGedcomDate(p.tglLahir);
+        if (gd) lines.push(`2 DATE ${gd}`);
+        if (p.tempatLahir) this._pushText(lines, 2, 'PLAC', p.tempatLahir);
+      }
+      if (p.tglWafat) {
+        lines.push('1 DEAT');
+        const gd = this._toGedcomDate(p.tglWafat);
+        if (gd) lines.push(`2 DATE ${gd}`);
+      }
+      if (p.agama) this._pushText(lines, 1, 'RELI', p.agama);
+      if (p.pekerjaan) this._pushText(lines, 1, 'OCCU', p.pekerjaan);
+      if (p.alamat) {
+        lines.push('1 RESI');
+        this._pushText(lines, 2, 'ADDR', p.alamat);
+      }
+      if (p.catatan) this._pushText(lines, 1, 'NOTE', p.catatan);
+      (famsByPerson[p.id] || []).forEach(mid => lines.push(`1 FAMS ${famRef(mid)}`));
+      if (famcByChild[p.id]) lines.push(`1 FAMC ${famRef(famcByChild[p.id])}`);
+    });
+
+    marriages.forEach(m => {
+      lines.push(`0 ${famRef(m.id)} FAM`);
+      if (m.orangId1 && indiRef(m.orangId1)) {
+        const p1 = people.find(p => p.id === m.orangId1);
+        lines.push(`1 ${p1 && p1.jenisKelamin === 'Perempuan' ? 'WIFE' : 'HUSB'} ${indiRef(m.orangId1)}`);
+      }
+      if (m.orangId2 && indiRef(m.orangId2)) {
+        const p2 = people.find(p => p.id === m.orangId2);
+        lines.push(`1 ${p2 && p2.jenisKelamin === 'Perempuan' ? 'WIFE' : 'HUSB'} ${indiRef(m.orangId2)}`);
+      }
+      (m.childIds || []).forEach(cid => { if (indiRef(cid)) lines.push(`1 CHIL ${indiRef(cid)}`); });
+    });
+
+    lines.push('0 TRLR');
+    return lines.join('\r\n');
+  },
+
+  // ---------- IMPORT ----------
+
+  // "1 JAN 1950" / "JAN 1950" / "1950" -> {iso: 'YYYY-MM-DD'} kalau lengkap
+  // (hari+bulan+tahun), atau {raw: teks asli} kalau sebagian (skema kita
+  // -- input type=date -- hanya menerima tanggal lengkap; bagian yang tidak
+  // lengkap tetap disimpan sbg catatan supaya informasinya tidak hilang).
+  _parseGedcomDate(value) {
+    const cleaned = String(value || '').replace(/^(ABT|EST|CAL|BEF|AFT|FROM|TO)\s+/i, '').trim();
+    const m = cleaned.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{3,4})$/);
+    if (m) {
+      const monIdx = this.MONTHS.indexOf(m[2].slice(0, 3).toUpperCase());
+      if (monIdx >= 0) {
+        return { iso: `${m[3]}-${String(monIdx + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}` };
+      }
+    }
+    return cleaned ? { raw: value.trim() } : {};
+  },
+
+  // Parser GEDCOM minimalis (level-based, dgn dukungan CONC/CONT) --
+  // cukup utk tag-tag yang kita dukung. Mengembalikan data mentah dalam
+  // bentuk "ID versi file GEDCOM" (bukan ID Firestore) -- importToFirestore()
+  // di bawah yang menerjemahkannya jadi dokumen baru.
+  parse(text) {
+    const rawLines = String(text || '').split(/\r\n|\r|\n/);
+    const indis = [];
+    const fams = [];
+    let context = null; // {type:'INDI'|'FAM'|'OTHER', ref}
+    let sub1 = null;     // tag level-1 yg sedang aktif, mis. 'BIRT'/'NOTE'
+    let contTarget = null; // {obj, key} tujuan penyambungan CONC/CONT saat ini
+
+    const lineRe = /^(\d+)\s+(?:(@[^@]+@)\s+)?(\S+)(?:\s(.*))?$/;
+
+    for (const raw of rawLines) {
+      // TIDAK memotong spasi di ujung baris di sini -- baris CONC/CONT bisa
+      // sengaja diakhiri spasi kalau itu memang bagian dari teks aslinya
+      // (lihat catatan di _pushText()). Baris yang cuma berisi whitespace
+      // (baris kosong pemisah) tetap dilewati.
+      if (!raw.trim()) continue;
+      const m = raw.match(lineRe);
+      if (!m) continue;
+      const level = parseInt(m[1], 10);
+      const xref = m[2] ? m[2].replace(/@/g, '') : null;
+      const tag = m[3];
+      const value = m[4] || '';
+
+      if (level === 0) {
+        sub1 = null; contTarget = null;
+        // Untuk baris level 0 dgn XREF (mis. "0 @I1@ INDI"), regex di atas
+        // menaruh XREF di grup ke-2 dan kata "INDI"/"FAM" itu sendiri di
+        // grup TAG (bukan di grup value) -- beda dgn baris level 1+ (mis.
+        // "1 SEX M") yg tidak punya XREF, jadi tag=nama-field & value=isinya.
+        if (tag === 'INDI') {
+          const p = { gid: xref, nama: '', jenisKelamin: '', tglLahir: '', tempatLahir: '', tglWafat: '', agama: '', pekerjaan: '', alamat: '', catatan: '' };
+          indis.push(p);
+          context = { type: 'INDI', ref: p };
+        } else if (tag === 'FAM') {
+          const f = { gid: xref, huid: null, wid: null, childGids: [] };
+          fams.push(f);
+          context = { type: 'FAM', ref: f };
+        } else {
+          context = { type: 'OTHER' };
+        }
+        continue;
+      }
+      if (!context || context.type === 'OTHER') continue;
+
+      if ((tag === 'CONC' || tag === 'CONT') && contTarget) {
+        contTarget.obj[contTarget.key] += (tag === 'CONT' ? '\n' : '') + value;
+        continue;
+      }
+
+      if (context.type === 'INDI') {
+        const p = context.ref;
+        if (level === 1) {
+          sub1 = tag; contTarget = null;
+          if (tag === 'NAME') {
+            const parts = value.split('/');
+            const given = (parts[0] || '').trim();
+            const surname = (parts[1] || '').trim();
+            p.nama = [given, surname].filter(Boolean).join(' ').trim() || value.trim();
+            contTarget = { obj: p, key: 'nama' };
+          } else if (tag === 'SEX') {
+            p.jenisKelamin = value.trim().toUpperCase() === 'M' ? 'Laki-laki' : value.trim().toUpperCase() === 'F' ? 'Perempuan' : '';
+          } else if (tag === 'RELI') {
+            p.agama = value.trim();
+            contTarget = { obj: p, key: 'agama' };
+          } else if (tag === 'OCCU') {
+            p.pekerjaan = value.trim();
+            contTarget = { obj: p, key: 'pekerjaan' };
+          } else if (tag === 'NOTE') {
+            p.catatan = value.trim();
+            contTarget = { obj: p, key: 'catatan' };
+          }
+        } else if (level === 2) {
+          if (sub1 === 'BIRT' && tag === 'DATE') {
+            const d = this._parseGedcomDate(value);
+            if (d.iso) p.tglLahir = d.iso;
+            else if (d.raw) p.catatan = (p.catatan ? p.catatan + '\n' : '') + `Tanggal lahir (dari GEDCOM, format tidak lengkap): ${d.raw}`;
+          } else if (sub1 === 'BIRT' && tag === 'PLAC') {
+            p.tempatLahir = value.trim();
+            contTarget = { obj: p, key: 'tempatLahir' };
+          } else if (sub1 === 'DEAT' && tag === 'DATE') {
+            const d = this._parseGedcomDate(value);
+            if (d.iso) p.tglWafat = d.iso;
+            else if (d.raw) p.catatan = (p.catatan ? p.catatan + '\n' : '') + `Tanggal wafat (dari GEDCOM, format tidak lengkap): ${d.raw}`;
+          } else if (sub1 === 'RESI' && tag === 'ADDR') {
+            p.alamat = value.trim();
+            contTarget = { obj: p, key: 'alamat' };
+          }
+        }
+      } else if (context.type === 'FAM') {
+        const f = context.ref;
+        if (level === 1) {
+          contTarget = null;
+          if (tag === 'HUSB') f.huid = (value.match(/@([^@]+)@/) || [])[1] || null;
+          else if (tag === 'WIFE') f.wid = (value.match(/@([^@]+)@/) || [])[1] || null;
+          else if (tag === 'CHIL') { const cid = (value.match(/@([^@]+)@/) || [])[1]; if (cid) f.childGids.push(cid); }
+        }
+      }
+    }
+
+    return { indis, fams };
+  },
+
+  // Tulis hasil parse() sbg dokumen BARU di Firestore (tidak pernah
+  // menimpa data yang sudah ada -- beda dgn Import JSON yang memang untuk
+  // restore/replace). ID GEDCOM (@I1@ dst di file asal) hanya dipakai
+  // sementara utk menyambungkan relasi ayah/ibu/anak ke ID Firestore yang
+  // baru dibuat, lalu dibuang. Referensi ke ID GEDCOM yang tidak ditemukan
+  // (mis. file rusak/tidak lengkap) dilewati dgn aman, tidak menggagalkan
+  // keseluruhan proses.
+  async importToFirestore(indis, fams) {
+    const CHUNK = 400;
+    const gidToRef = new Map();
+    indis.forEach(p => gidToRef.set(p.gid, db.collection('people').doc()));
+
+    for (let i = 0; i < indis.length; i += CHUNK) {
+      const batch = db.batch();
+      indis.slice(i, i + CHUNK).forEach(p => {
+        const data = { nama: p.nama || '(Tanpa nama)', jenisKelamin: p.jenisKelamin || '' };
+        if (p.tglLahir) data.tglLahir = p.tglLahir;
+        if (p.tempatLahir) data.tempatLahir = p.tempatLahir;
+        if (p.tglWafat) data.tglWafat = p.tglWafat;
+        if (p.agama) data.agama = p.agama;
+        if (p.pekerjaan) data.pekerjaan = p.pekerjaan;
+        if (p.alamat) data.alamat = p.alamat;
+        if (p.catatan) data.catatan = p.catatan;
+        data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        batch.set(gidToRef.get(p.gid), data);
+      });
+      await batch.commit();
+    }
+
+    // Lacak berapa pernikahan sejauh ini per orang (urutan poligami), sesuai
+    // konvensi MarriageAPI.findOrCreate() (urutanPasangan mulai dari 1).
+    const marriageCountSoFar = {};
+    let createdMarriages = 0;
+    for (let i = 0; i < fams.length; i += CHUNK) {
+      const batch = db.batch();
+      fams.slice(i, i + CHUNK).forEach(f => {
+        const huRef = f.huid ? gidToRef.get(f.huid) : null;
+        const wiRef = f.wid ? gidToRef.get(f.wid) : null;
+        if (!huRef && !wiRef && f.childGids.every(cg => !gidToRef.get(cg))) return; // keluarga kosong total, lewati
+        const knownId = (huRef || wiRef || {}).id;
+        const urutan = knownId ? (marriageCountSoFar[knownId] = (marriageCountSoFar[knownId] || 0) + 1) : 1;
+        const childIds = f.childGids.map(cg => { const r = gidToRef.get(cg); return r ? r.id : null; }).filter(Boolean);
+        batch.set(db.collection('marriages').doc(), {
+          orangId1: huRef ? huRef.id : null,
+          orangId2: wiRef ? wiRef.id : null,
+          urutanPasangan: urutan,
+          childIds,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        createdMarriages++;
+      });
+      await batch.commit();
+    }
+
+    return { peopleCount: indis.length, marriageCount: createdMarriages };
   }
 };
 
