@@ -4,15 +4,34 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>Silsilah Keluarga</title>
-<meta name="theme-color" content="#4F7CAC">
+<meta name="theme-color" content="#3F6690">
 <link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<!-- Terapkan tema (terang/gelap) tersimpan SEBELUM CSS/konten dirender,
+     supaya tidak ada "kedipan" balik ke tema terang sesaat sebelum
+     js/theme.js sempat jalan (lihat js/theme.js). -->
+<script>
+(function(){
+  try {
+    var saved = localStorage.getItem('silsilah-theme');
+    var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch(e) {}
+})();
+</script>
 </head>
 <body>
 
 <header class="topbar">
   <div class="topbar-title" id="app-title">Silsilah Keluarga</div>
   <div class="topbar-actions">
+    <button id="btn-theme-toggle" class="theme-toggle-btn" title="Ganti tema terang/gelap" aria-label="Ganti tema terang/gelap">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+    </button>
     <button id="btn-notif-ultah" class="admin-link notif-bell-btn" title="Notifikasi Ulang Tahun">
       🔔<span id="notif-ultah-badge" class="badge notif-bell-badge" style="display:none">0</span>
     </button>
@@ -216,5 +235,6 @@
 <script src="js/birthday.js"></script>
 <script src="js/tree.js"></script>
 <script src="js/app.js"></script>
+<script src="js/theme.js"></script>
 </body>
 </html>
