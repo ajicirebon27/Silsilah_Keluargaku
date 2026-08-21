@@ -1,5 +1,49 @@
 # Silsilah Keluarga — Panduan Setup
 
+> **Baru di versi ini (v21) -- Log Aktivitas admin & proteksi anti-spam komentar:**
+> 1. **Log Aktivitas (audit log) -- baru.** Sebelumnya tidak ada pencatatan
+>    sama sekali soal siapa mengubah data apa dan kapan -- penting begitu
+>    lebih dari 1 orang bisa punya akses admin, dan juga berguna melacak
+>    kesalahan input pada data leluhur yang sensitif. Sekarang ada tab **Log
+>    Aktivitas** baru (admin) yang mencatat: tambah/ubah/hapus (ke Sampah)/
+>    pulihkan/hapus permanen data orang, atur relasi pasangan & orang tua,
+>    hapus komentar, ubah pengaturan (judul aplikasi, Keluarga Utama,
+>    background), ganti kata sandi (aksinya saja -- kata sandi baru TIDAK
+>    PERNAH dicatat), impor/restore JSON, impor GEDCOM, serta login/
+>    pendaftaran admin. Tiap entri log berisi aksi apa, objeknya (mis. nama
+>    orang), siapa (email admin), dan kapan. Log **hanya bisa dibaca lewat
+>    panel admin** (lihat rules `auditLog` di bawah -- **perlu publish
+>    ulang rules**), tidak pernah tampil ke publik. Ada juga tombol
+>    "Bersihkan Log Lebih Lama dari 90 Hari" murni untuk menjaga jumlah
+>    entri tidak menumpuk tak terbatas -- ini pruning atas permintaan
+>    eksplisit admin, bukan mengubah isi catatan yang masih relevan. Logika
+>    ada di `AuditLogAPI` (`js/db.js`).
+> 2. **Proteksi anti-spam pada form komentar publik -- diperkuat.** Sebelumnya
+>    form komentar publik hanya dijaga jeda 15 detik antar kirim & batas
+>    panjang teks -- keduanya bisa dilewati bot sederhana yang langsung
+>    memanggil form tanpa mematuhi jeda apapun. Sekarang ditambah 2 lapis
+>    proteksi murni sisi klien (tanpa perlu layanan captcha berbayar/pihak
+>    ketiga, tetap 100% gratis):
+>    - **Honeypot field tersembunyi.** Ada 1 kolom form yang disembunyikan
+>      dari manusia (lewat CSS, bukan `display:none` yang mudah dideteksi
+>      bot) tapi tetap "terlihat" oleh bot yang mengisi semua field secara
+>      otomatis. Kalau kolom ini terisi, kiriman dianggap spam dan diam-diam
+>      ditolak (tanpa memberi tahu bot alasannya, supaya bot tidak belajar
+>      menghindarinya).
+>    - **Captcha hitung sederhana + jeda minimum sebelum bisa kirim.** Setiap
+>      kali form komentar dibuka, muncul soal penjumlahan sederhana (mis.
+>      "3 + 5 = ?") yang harus dijawab benar sebelum terkirim, plus form
+>      tidak bisa langsung dikirim dalam 2 detik pertama setelah dibuka
+>      (bot yang mengisi & mengirim form dalam hitungan milidetik akan
+>      tertahan di sini). Soal captcha diperbarui otomatis tiap kali salah
+>      dijawab atau form dibuka ulang.
+>    - Catatan jujur: karena aplikasi ini murni statis (tanpa server sendiri),
+>      proteksi ini tetap proteksi sisi-klien -- efektif menahan bot generik/
+>      asal-asalan (mayoritas kasus spam nyata), tapi bukan jaminan mutlak
+>      terhadap penyerang yang sengaja menargetkan aplikasi ini secara manual.
+>      Jeda 15 detik & validasi panjang di Firestore Rules (lapis paling kuat,
+>      tidak bisa dilewati sama sekali) tetap dipertahankan seperti sebelumnya.
+
 > **Baru di versi ini (v20) -- Cek Hubungan Kekerabatan antar 2 orang:**
 > Sebelumnya, tab **Laporan** (admin) dan Modal **Laporan** (publik) hanya
 > menjelaskan posisi 1 orang relatif ke leluhurnya sendiri ("anak dari...",
@@ -345,6 +389,17 @@ service cloud.firestore {
         !exists(/databases/$(database)/documents/settings/admin) &&
         request.resource.data.uid == request.auth.uid;
       allow update: if isAdmin();
+    }
+    match /auditLog/{doc} {
+      // Log aktivitas admin (v21) -- siapa mengubah data apa & kapan. HANYA
+      // admin yang login yang boleh membaca maupun menulis (termasuk hapus,
+      // dipakai tombol "Bersihkan Log Lebih Lama dari 90 Hari"). Publik/tamu
+      // TIDAK PERNAH boleh membaca koleksi ini walau lewat console browser.
+      allow read, create, delete: if isAdmin();
+      // Tidak ada "update" -- entri log yang sudah tercatat tidak pernah
+      // diubah, hanya bisa ditambah (create) atau dihapus seluruhnya (delete)
+      // lewat pembersihan log lama. Ini menjaga nilai log sebagai catatan
+      // yang tidak bisa direkayasa setelah kejadian.
     }
   }
 }

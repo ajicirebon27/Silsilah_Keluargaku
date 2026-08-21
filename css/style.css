@@ -541,6 +541,36 @@ body {
 .comment-feedback.success { color: var(--green-deep); }
 .comment-feedback.error { color: var(--danger); }
 
+/* Honeypot anti-spam (lihat komentar di index.html/js/app.js) -- kolom ini
+   HARUS tetap ada di alur render normal (bukan display:none) supaya bot
+   yang mengecek display:none tetap mengisinya, tapi harus benar-benar tidak
+   terlihat/tidak bisa dijangkau manusia yang memakai mouse, keyboard (tab),
+   atau screen reader. */
+.hp-field {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.comment-captcha-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.comment-captcha-label { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+.comment-captcha-input {
+  width: 80px;
+  flex: none;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
 /* ---------- Forms (shared) ---------- */
 form input[type=text], form input[type=email], form input[type=password],
 form input[type=date], form input[type=file], form select, form textarea {

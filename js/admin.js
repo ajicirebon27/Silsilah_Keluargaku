@@ -112,6 +112,7 @@ async function setupAuthForm() {
       if (isRegistered) {
         const email = resolveLoginEmail(rawInput);
         await auth.signInWithEmailAndPassword(email, password);
+        AuditLogAPI.log('login_admin', {});
       } else {
         const stillNotRegistered = !(await SettingsAPI.isAdminRegistered());
         if (!stillNotRegistered) {
@@ -121,6 +122,7 @@ async function setupAuthForm() {
         await auth.createUserWithEmailAndPassword(rawInput, password);
         try {
           await SettingsAPI.markAdminRegistered(auth.currentUser.uid);
+          AuditLogAPI.log('register_admin', {});
         } catch (settingErr) {
           // Ditolak oleh Firestore Rules -- artinya ada orang lain yang barusan
           // lebih dulu terdaftar sebagai admin (race condition). Akun auth yang
@@ -164,6 +166,7 @@ async function bootAdmin() {
   setupDashboardDetailModal();
   setupBirthdayModal();
   setupAdminViewSwitch();
+  setupAuditLogTab();
   await refreshAll();
   await refreshCommentBadge();
   await refreshTrashBadge();
@@ -274,6 +277,7 @@ function setupTabs() {
       if (btn.dataset.tab === 'tab-komentar') renderComments();
       if (btn.dataset.tab === 'tab-sampah') renderTrash();
       if (btn.dataset.tab === 'tab-dashboard') renderAdminDashboard();
+      if (btn.dataset.tab === 'tab-log') renderAuditLog(true);
     });
   });
 }
@@ -508,6 +512,7 @@ async function bulkDeleteSelected() {
   for (const id of ids) {
     await PeopleAPI.delete(id);
   }
+  AuditLogAPI.log('soft_delete_person', { label: `${ids.length} orang sekaligus`, detail: preview });
   selectedPersonIds.clear();
   await refreshAll();
   await refreshTrashBadge();
@@ -601,6 +606,7 @@ async function deletePersonRow(id) {
   if (!p) return;
   if (!confirm(buildDeleteConfirmMessage(p))) return;
   await PeopleAPI.delete(id);
+  AuditLogAPI.log('soft_delete_person', { label: p.nama });
   await refreshAll();
   await refreshTrashBadge();
 }
@@ -786,8 +792,10 @@ async function savePerson(e) {
     let personId = editingPersonId;
     if (personId) {
       await PeopleAPI.update(personId, data);
+      AuditLogAPI.log('update_person', { label: data.nama });
     } else {
       personId = await PeopleAPI.add(data);
+      AuditLogAPI.log('create_person', { label: data.nama });
     }
 
     if (pendingFotoFile) {
@@ -820,6 +828,7 @@ async function deleteCurrentPerson() {
   if (!p) return;
   if (!confirm(buildDeleteConfirmMessage(p))) return;
   await PeopleAPI.delete(editingPersonId);
+  AuditLogAPI.log('soft_delete_person', { label: p.nama });
   closePersonForm();
   await refreshAll();
   await refreshTrashBadge();
@@ -938,13 +947,18 @@ async function addPasanganForSelected() {
   const ayahId = isMale ? person.id : partner.id;
   const ibuId = isMale ? partner.id : person.id;
   await MarriageAPI.findOrCreate(ayahId, ibuId, allMarriages);
+  AuditLogAPI.log('add_pasangan', { label: `${person.nama} & ${partner.nama}` });
 
   await refreshRelasiData();
 }
 
 async function removePasangan(marriageId) {
   if (!confirm('Hapus relasi pasangan ini? Anak-anak dari pernikahan ini juga akan kehilangan relasi orang tua tersebut.')) return;
+  const m = allMarriages.find(x => x.id === marriageId);
+  const label = m ? [allPeople.find(p => p.id === m.orangId1), allPeople.find(p => p.id === m.orangId2)]
+    .filter(Boolean).map(p => p.nama).join(' & ') : marriageId;
   await MarriageAPI.delete(marriageId);
+  AuditLogAPI.log('remove_pasangan', { label });
   await refreshRelasiData();
 }
 
@@ -1154,6 +1168,10 @@ async function saveOrtuForSelected() {
   }
 
   await MarriageAPI.setParents(person.id, ayahId, ibuId, allMarriages);
+  AuditLogAPI.log('set_ortu', {
+    label: person.nama,
+    detail: `Ayah: ${ayahPerson ? ayahPerson.nama : '-'}, Ibu: ${ibuPerson ? ibuPerson.nama : '-'}`
+  });
   await refreshRelasiData();
   const noteEl2 = document.getElementById('relasi-ortu-note');
   noteEl2.textContent = 'Berhasil disimpan.';
@@ -1395,6 +1413,7 @@ async function markCommentRead(id) {
 async function deleteComment(id) {
   if (!confirm('Hapus komentar ini?')) return;
   await CommentAPI.delete(id);
+  AuditLogAPI.log('delete_comment', {});
   await renderComments();
   await refreshCommentBadge();
 }
@@ -1448,7 +1467,10 @@ async function renderTrash() {
 }
 
 async function restorePersonRow(id) {
+  const trash = await PeopleAPI.getTrash();
+  const p = trash.find(x => x.id === id);
   await PeopleAPI.restore(id);
+  AuditLogAPI.log('restore_person', { label: p ? p.nama : id });
   await refreshAll();
   await renderTrash();
   await refreshTrashBadge();
@@ -1466,9 +1488,124 @@ async function hardDeletePersonRow(id) {
   );
   if (!ok) return;
   await PeopleAPI.hardDelete(id);
+  AuditLogAPI.log('hard_delete_person', { label: nama });
   await refreshAll();
   await renderTrash();
   await refreshTrashBadge();
+}
+
+// ======================================================================
+// TAB: LOG AKTIVITAS (audit log)
+// ======================================================================
+
+// Peta kode aksi (dicatat apa adanya di Firestore lewat AuditLogAPI.log())
+// -> teks & ikon yang mudah dibaca admin. Dipisah dari kode aksi supaya
+// teks tampilan bisa diubah/diterjemahkan kapan saja tanpa mengubah data
+// yang sudah tersimpan di riwayat lama.
+const AUDIT_ACTION_LABELS = {
+  login_admin: { icon: '🔑', text: 'Login admin' },
+  register_admin: { icon: '🔑', text: 'Pendaftaran admin pertama' },
+  change_password: { icon: '🔑', text: 'Mengubah kata sandi admin' },
+  create_person: { icon: '➕', text: 'Menambah data orang' },
+  update_person: { icon: '✏️', text: 'Mengubah data orang' },
+  soft_delete_person: { icon: '🗑️', text: 'Memindahkan orang ke Sampah' },
+  restore_person: { icon: '♻️', text: 'Memulihkan orang dari Sampah' },
+  hard_delete_person: { icon: '❌', text: 'Menghapus orang secara permanen' },
+  add_pasangan: { icon: '💍', text: 'Menambah relasi pasangan' },
+  remove_pasangan: { icon: '💔', text: 'Menghapus relasi pasangan' },
+  set_ortu: { icon: '👪', text: 'Mengatur relasi orang tua' },
+  delete_comment: { icon: '🗑️', text: 'Menghapus komentar' },
+  update_settings: { icon: '⚙️', text: 'Mengubah pengaturan aplikasi' },
+  update_background: { icon: '🎨', text: 'Mengubah background tampilan publik' },
+  import_json: { icon: '📥', text: 'Impor/restore data dari backup JSON' },
+  import_gedcom: { icon: '📥', text: 'Impor data dari file GEDCOM' }
+};
+
+function auditLogActionMeta(action) {
+  return AUDIT_ACTION_LABELS[action] || { icon: '•', text: action };
+}
+
+let auditLogCursor = null;
+let auditLogHasMore = false;
+let auditLogItems = [];
+
+function setupAuditLogTab() {
+  const btnMore = document.getElementById('btn-auditlog-more');
+  if (btnMore) btnMore.addEventListener('click', () => renderAuditLog(false));
+
+  const btnCleanup = document.getElementById('btn-auditlog-cleanup');
+  if (btnCleanup) btnCleanup.addEventListener('click', async () => {
+    const ok = confirm(
+      'Hapus semua entri Log Aktivitas yang lebih lama dari 90 hari?\n\n' +
+      'Ini hanya membersihkan riwayat log lama untuk kerapian/menghemat kuota -- ' +
+      'TIDAK mempengaruhi data orang/pernikahan/pengaturan yang sesungguhnya, dan tidak bisa dibatalkan.'
+    );
+    if (!ok) return;
+    const feedback = document.getElementById('auditlog-feedback');
+    feedback.textContent = 'Sedang membersihkan...';
+    feedback.className = 'comment-feedback';
+    try {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 90);
+      const count = await AuditLogAPI.deleteOlderThan(cutoff);
+      feedback.textContent = count > 0
+        ? `Berhasil menghapus ${count} entri log lama.`
+        : 'Tidak ada entri log yang lebih lama dari 90 hari.';
+      feedback.className = 'comment-feedback success';
+      await renderAuditLog(true);
+    } catch (err) {
+      feedback.textContent = 'Gagal membersihkan log: ' + err.message;
+      feedback.className = 'comment-feedback error';
+    }
+  });
+}
+
+async function renderAuditLog(reset) {
+  const listEl = document.getElementById('auditlog-list');
+  const btnMore = document.getElementById('btn-auditlog-more');
+  if (!listEl) return;
+
+  if (reset) {
+    auditLogItems = [];
+    auditLogCursor = null;
+    listEl.innerHTML = '<p class="empty-row">Memuat...</p>';
+  }
+
+  try {
+    const { items, lastDoc, hasMore } = await AuditLogAPI.getPage(auditLogCursor);
+    auditLogItems = reset ? items : auditLogItems.concat(items);
+    auditLogCursor = lastDoc;
+    auditLogHasMore = hasMore;
+  } catch (err) {
+    listEl.innerHTML = `<p class="empty-row">Gagal memuat log aktivitas: ${escapeHtml(err.message)}</p>`;
+    return;
+  }
+
+  if (auditLogItems.length === 0) {
+    listEl.innerHTML = '<p class="empty-row">Belum ada aktivitas tercatat.</p>';
+    if (btnMore) btnMore.style.display = 'none';
+    return;
+  }
+
+  listEl.innerHTML = auditLogItems.map(entry => {
+    const meta = auditLogActionMeta(entry.action);
+    const waktu = entry.waktu && entry.waktu.toDate ? entry.waktu.toDate().toLocaleString('id-ID') : '(baru saja)';
+    const siapa = entry.adminEmail || '(tidak diketahui)';
+    return `
+      <div class="comment-card">
+        <div class="comment-card-header">
+          <strong>${meta.icon} ${escapeHtml(meta.text)}</strong>
+          ${entry.label ? `<span class="comment-card-target">${escapeHtml(entry.label)}</span>` : ''}
+        </div>
+        ${entry.detail ? `<p class="comment-card-text">${escapeHtml(entry.detail)}</p>` : ''}
+        <div class="comment-card-footer">
+          <span class="comment-card-time">${escapeHtml(siapa)} &middot; ${waktu}</span>
+          <span></span>
+        </div>
+      </div>`;
+  }).join('');
+
+  if (btnMore) btnMore.style.display = auditLogHasMore ? 'inline-block' : 'none';
 }
 
 // ======================================================================
@@ -1648,6 +1785,7 @@ function setupSettings() {
   document.getElementById('btn-save-title').addEventListener('click', async () => {
     const title = document.getElementById('setting-title').value.trim() || 'Silsilah Keluarga';
     await SettingsAPI.updateAppSettings({ judulAplikasi: title });
+    AuditLogAPI.log('update_settings', { label: 'Judul aplikasi', detail: title });
     showSettingFeedback('Judul aplikasi disimpan.');
   });
 
@@ -1660,6 +1798,11 @@ function setupSettings() {
     const rootPersonId = rootPersonSelectWidget.getValue() || null;
     await SettingsAPI.updateAppSettings({ rootPersonId });
     cachedAppSettings.rootPersonId = rootPersonId;
+    const rootPersonNama = rootPersonId ? (allPeople.find(p => p.id === rootPersonId) || {}).nama : null;
+    AuditLogAPI.log('update_settings', {
+      label: 'Keluarga Utama untuk Tampilan Publik',
+      detail: rootPersonNama || '(dikosongkan -- tampilkan semua keluarga)'
+    });
     showSettingFeedback(rootPersonId
       ? 'Keluarga utama untuk tampilan publik disimpan. Tampilan publik sekarang hanya menampilkan keluarga ini.'
       : 'Pembatasan keluarga utama dihapus -- tampilan publik akan menampilkan semua keluarga lagi.');
@@ -1674,6 +1817,9 @@ function setupSettings() {
     try {
       await auth.currentUser.updatePassword(newPass);
       document.getElementById('setting-newpass').value = '';
+      // Catatan: hanya AKSInya yang dicatat -- kata sandi baru itu sendiri
+      // TIDAK PERNAH ditulis ke log aktivitas dengan alasan apapun.
+      AuditLogAPI.log('change_password', {});
       showSettingFeedback('Kata sandi berhasil diubah.');
     } catch (err) {
       showSettingFeedback('Gagal ubah kata sandi: ' + err.message, true);
@@ -1775,6 +1921,10 @@ async function handleImportGedcomFile(e) {
   showGedcomFeedback('Sedang mengimpor data, mohon tunggu...');
   try {
     const result = await GedcomAPI.importToFirestore(indis, fams);
+    AuditLogAPI.log('import_gedcom', {
+      label: file.name,
+      detail: `${result.peopleCount} orang, ${result.marriageCount} pernikahan`
+    });
     await refreshAll();
     await refreshCommentBadge();
     showGedcomFeedback(`Berhasil mengimpor ${result.peopleCount} orang & ${result.marriageCount} pernikahan dari file GEDCOM.`);
@@ -1819,6 +1969,7 @@ function setupBackgroundSettings() {
       cachedAppSettings.backgroundColor = palette.value;
       delete cachedAppSettings.backgroundImage;
       renderBackgroundPreview();
+      AuditLogAPI.log('update_background', { label: `Warna: ${palette.name}` });
       showBgFeedback(`Background diganti ke warna "${palette.name}".`);
     } catch (err) {
       showBgFeedback('Gagal menyimpan warna background: ' + err.message, true);
@@ -1839,6 +1990,7 @@ function setupBackgroundSettings() {
       cachedAppSettings.backgroundType = cachedAppSettings.backgroundColor ? 'color' : 'default';
       delete cachedAppSettings.backgroundImage;
       renderBackgroundPreview();
+      AuditLogAPI.log('update_background', { label: 'Gambar background dihapus' });
       showBgFeedback('Gambar background dihapus.');
     } catch (err) {
       showBgFeedback('Gagal menghapus gambar background: ' + err.message, true);
@@ -1857,6 +2009,7 @@ function setupBackgroundSettings() {
       delete cachedAppSettings.backgroundImage;
       delete cachedAppSettings.backgroundColor;
       renderBackgroundPreview();
+      AuditLogAPI.log('update_background', { label: 'Dikembalikan ke tampilan bawaan' });
       showBgFeedback('Background dikembalikan ke tampilan bawaan.');
     } catch (err) {
       showBgFeedback('Gagal mengembalikan ke bawaan: ' + err.message, true);
@@ -1891,6 +2044,7 @@ async function handleBackgroundImageChange(e) {
     cachedAppSettings.backgroundImage = base64;
     delete cachedAppSettings.backgroundColor;
     renderBackgroundPreview();
+    AuditLogAPI.log('update_background', { label: `Gambar kustom: ${file.name}` });
     showBgFeedback('Gambar background berhasil disimpan & langsung dipakai di tampilan publik.');
   } catch (err) {
     showBgFeedback('Gagal mengunggah gambar background: ' + err.message, true);
@@ -1993,6 +2147,10 @@ async function handleImportFile(e) {
     if (marriages.length) await MarriageAPI.importAll(marriages);
     if (comments.length) await CommentAPI.importAll(comments);
     if (settings) await SettingsAPI.updateAppSettings(settings);
+    AuditLogAPI.log('import_json', {
+      label: file.name,
+      detail: `${people.length} orang, ${marriages.length} pernikahan, ${comments.length} komentar${settings ? ', pengaturan aplikasi' : ''}`
+    });
     await refreshAll();
     await refreshCommentBadge();
     if (settings) {

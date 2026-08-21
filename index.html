@@ -105,6 +105,26 @@
         <input type="text" id="comment-name" placeholder="Nama kamu (wajib diisi)" required maxlength="80">
         <textarea id="comment-text" placeholder="Tulis komentar atau saran..." required rows="3" maxlength="1000"></textarea>
         <div id="comment-counter" class="comment-counter">0/1000</div>
+
+        <!-- Honeypot anti-spam: kolom ini disembunyikan dari manusia lewat CSS
+             (bukan display:none, supaya bot yang mendeteksi display:none tetap
+             tertipu), tapi tetap "terlihat" oleh bot yang mengisi semua field
+             form secara otomatis. Kalau field ini terisi, kiriman dianggap
+             spam dan ditolak diam-diam di submitComment() (js/app.js). Nama
+             field sengaja dibuat menarik bagi bot ("website") -- pengguna asli
+             tidak pernah perlu menyentuhnya sama sekali. -->
+        <div class="hp-field" aria-hidden="true">
+          <label for="comment-website">Website (jangan diisi)</label>
+          <input type="text" id="comment-website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+
+        <!-- Captcha hitung sederhana -- lihat initCommentCaptcha() di js/app.js.
+             Soal & jawaban diperbarui otomatis tiap kali modal detail dibuka. -->
+        <div class="comment-captcha-row">
+          <label for="comment-captcha-answer" id="comment-captcha-question" class="comment-captcha-label">Berapa 1 + 1?</label>
+          <input type="number" id="comment-captcha-answer" class="comment-captcha-input" placeholder="Jawaban" required inputmode="numeric">
+        </div>
+
         <button type="submit" class="btn-primary">Kirim Komentar</button>
       </form>
       <div id="comment-feedback" class="comment-feedback"></div>

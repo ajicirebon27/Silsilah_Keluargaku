@@ -351,6 +351,96 @@ const CommentAPI = {
 };
 
 // =====================================================================
+// LOG AKTIVITAS ADMIN (audit log) -- v21.
+// Mencatat SIAPA mengubah data APA dan KAPAN. Sebelumnya tidak ada
+// pencatatan sama sekali -- kalau data leluhur berubah tak terduga atau
+// suatu saat lebih dari 1 orang punya akses admin, tidak ada cara melacak
+// siapa yang melakukannya. Sekarang setiap aksi tulis penting (tambah/ubah/
+// hapus orang, atur relasi, hapus komentar, ubah pengaturan, impor/restore
+// data, login admin) dicatat sebagai 1 entri di koleksi Firestore
+// `auditLog`, dan bisa dilihat lewat tab **Log Aktivitas** (admin).
+//
+// Desain sengaja MINIMALIS (bukan sistem audit generik yang mencatat versi
+// lama vs baru per-field) supaya tidak menambah ukuran dokumen/biaya baca-
+// tulis Firestore secara berlebihan -- yang dicatat cukup: aksi apa
+// (`action`), label singkat yang bisa dibaca manusia (`label`, mis. nama
+// orang yang diubah), keterangan tambahan opsional (`detail`), serta siapa &
+// kapan (`adminUid`/`adminEmail`/`waktu`). Ini cukup untuk menjawab
+// pertanyaan "siapa yang menghapus data X, kapan?" tanpa perlu membaca ulang
+// seluruh riwayat perubahan tiap field.
+//
+// Koleksi ini HANYA bisa dibaca & ditulis oleh admin yang login (lihat
+// bagian Rules di README -- perlu publish ulang rules supaya proteksi ini
+// aktif). Log bersifat tambah-saja dari sisi tampilan aplikasi (tidak ada
+// tombol edit isi log) -- nilai sebuah catatan audit justru ada pada
+// keasliannya. Admin tetap bisa membersihkan entri LAMA lewat tombol
+// "Bersihkan log lebih lama dari 90 hari" di tab Log Aktivitas, murni untuk
+// menjaga jumlah dokumen tidak menumpuk tanpa batas -- ini pruning atas
+// permintaan eksplisit admin, bukan mengubah isi catatan yang masih relevan.
+// =====================================================================
+const AuditLogAPI = {
+  MAX_LABEL: 200,
+  MAX_DETAIL: 500,
+  PAGE_SIZE: 30,
+
+  // Mencatat 1 entri log. `action` adalah kode singkat (lihat peta label di
+  // admin.js -> auditLogActionLabel()), `meta.label` adalah nama/identitas
+  // yang jadi objek aksi (mis. nama orang), `meta.detail` keterangan
+  // tambahan opsional (mis. ringkasan jumlah data saat impor).
+  //
+  // SENGAJA tidak melempar error ke pemanggil: mencatat log adalah aksi
+  // SEKUNDER -- kalau gagal (mis. sedang offline), aksi utama admin (simpan
+  // data orang, dst) TETAP harus berhasil dan tidak boleh ikut gagal gara-
+  // gara log tidak tercatat. Kegagalan cukup dicatat ke console.
+  async log(action, meta = {}) {
+    try {
+      const user = auth.currentUser;
+      await db.collection('auditLog').add({
+        action,
+        label: meta.label ? String(meta.label).slice(0, this.MAX_LABEL) : null,
+        detail: meta.detail ? String(meta.detail).slice(0, this.MAX_DETAIL) : null,
+        adminUid: user ? user.uid : null,
+        adminEmail: user ? user.email : null,
+        waktu: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (err) {
+      console.warn('Gagal mencatat log aktivitas (tidak mempengaruhi aksi utama):', err.message);
+    }
+  },
+
+  // Ambil 1 halaman log (terbaru dulu), dgn cursor Firestore utk "Muat
+  // lebih banyak" -- dipakai tab Log Aktivitas supaya tidak menarik SEMUA
+  // riwayat sekaligus kalau sudah menumpuk ribuan entri.
+  async getPage(cursorDoc = null) {
+    let q = db.collection('auditLog').orderBy('waktu', 'desc').limit(this.PAGE_SIZE);
+    if (cursorDoc) q = q.startAfter(cursorDoc);
+    const snap = await q.get();
+    return {
+      items: snap.docs.map(d => ({ id: d.id, ...d.data() })),
+      lastDoc: snap.docs.length ? snap.docs[snap.docs.length - 1] : null,
+      hasMore: snap.docs.length === this.PAGE_SIZE
+    };
+  },
+
+  // Hapus semua entri log yang waktunya SEBELUM `beforeDate` (Date object).
+  // Dipecah per 400 dokumen/batch (batas aman jauh di bawah limit 500
+  // operasi/batch Firestore) supaya tetap aman kalau log yang dibersihkan
+  // jumlahnya besar.
+  async deleteOlderThan(beforeDate) {
+    const snap = await db.collection('auditLog').where('waktu', '<', beforeDate).get();
+    if (snap.empty) return 0;
+    const docs = snap.docs;
+    const BATCH_SIZE = 400;
+    for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+      const batch = db.batch();
+      docs.slice(i, i + BATCH_SIZE).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    return docs.length;
+  }
+};
+
+// =====================================================================
 // GEDCOM -- format standar pertukaran data silsilah keluarga (dipakai
 // Ancestry, MyHeritage, FamilySearch, Gramps, dll). Modul ini menangani
 // EXPORT (data kita -> file .ged) dan IMPORT (file .ged dari aplikasi

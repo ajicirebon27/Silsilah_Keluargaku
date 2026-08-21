@@ -487,6 +487,7 @@ function openDetail(personId) {
   `;
   document.getElementById('comment-form').reset();
   document.getElementById('comment-feedback').textContent = '';
+  initCommentCaptcha();
   document.getElementById('detail-modal').style.display = 'flex';
 }
 
@@ -1195,6 +1196,41 @@ function renderJelajah() {
 
 const COMMENT_COOLDOWN_MS = 15000; // jeda minimal 15 detik antar kirim komentar dari browser yang sama
 
+// =====================================================================
+// ANTI-SPAM FORM KOMENTAR PUBLIK -- v21.
+// Sebelumnya form komentar hanya dijaga jeda 15 detik + batas panjang teks
+// (di atas & di Firestore Rules) -- keduanya bisa dilewati bot sederhana
+// yang langsung mengisi & submit tanpa mematuhi apapun di sisi klien.
+// Ditambah 2 lapis proteksi murni sisi klien (aplikasi ini statis, tanpa
+// server sendiri untuk verifikasi captcha pihak ketiga seperti reCAPTCHA):
+//   1. Honeypot -- field #comment-website disembunyikan dari manusia lewat
+//      CSS (.hp-field di style.css), tapi tetap ada di DOM sehingga bot
+//      generik yang mengisi SEMUA field form biasanya ikut mengisinya.
+//      Terisi = kiriman ditolak diam-diam (lihat submitComment()).
+//   2. Captcha hitung sederhana + jeda minimum sebelum form boleh dikirim
+//      (bot yang submit dalam hitungan milidetik setelah form muncul akan
+//      tertahan di sini).
+// Ini BUKAN proteksi sempurna terhadap penyerang yang menargetkan aplikasi
+// ini secara manual -- tapi menahan mayoritas spam bot generik/asal-asalan
+// yang jadi kasus paling umum di form publik tanpa login.
+// =====================================================================
+let commentCaptchaAnswer = null;
+let commentFormOpenedAt = 0;
+const COMMENT_MIN_FILL_MS = 2000; // form tidak boleh dikirim dlm 2 detik pertama sejak dibuka
+
+function initCommentCaptcha() {
+  const a = 1 + Math.floor(Math.random() * 9);
+  const b = 1 + Math.floor(Math.random() * 9);
+  commentCaptchaAnswer = a + b;
+  commentFormOpenedAt = Date.now();
+  const label = document.getElementById('comment-captcha-question');
+  const input = document.getElementById('comment-captcha-answer');
+  if (label) label.textContent = `Berapa ${a} + ${b}?`;
+  if (input) input.value = '';
+  const hp = document.getElementById('comment-website');
+  if (hp) hp.value = '';
+}
+
 async function submitComment(e) {
   e.preventDefault();
   const nama = document.getElementById('comment-name').value.trim();
@@ -1202,6 +1238,39 @@ async function submitComment(e) {
   const feedback = document.getElementById('comment-feedback');
   const submitBtn = document.querySelector('#comment-form button[type="submit"]');
   if (!nama || !isi) return;
+
+  // 1) Honeypot: field ini seharusnya SELALU kosong untuk pengguna asli
+  // (disembunyikan lewat CSS). Kalau terisi, ini bot -- ditolak diam-diam
+  // dengan pesan sukses palsu, supaya bot tidak "belajar" mendeteksi
+  // penolakan & mencoba menghindarinya di percobaan berikutnya.
+  const honeypot = document.getElementById('comment-website').value;
+  if (honeypot) {
+    feedback.textContent = 'Terima kasih, komentar kamu sudah terkirim ke admin.';
+    feedback.className = 'comment-feedback success';
+    document.getElementById('comment-form').reset();
+    document.getElementById('comment-counter').textContent = '0/1000';
+    initCommentCaptcha();
+    return;
+  }
+
+  // 2) Jeda minimum sejak form dibuka -- bot yang mengisi & submit dalam
+  // hitungan milidetik akan tertahan di sini (manusia butuh waktu membaca
+  // & mengetik).
+  if (Date.now() - commentFormOpenedAt < COMMENT_MIN_FILL_MS) {
+    feedback.textContent = 'Mohon isi form dengan wajar sebelum mengirim.';
+    feedback.className = 'comment-feedback error';
+    return;
+  }
+
+  // 3) Captcha hitung sederhana.
+  const captchaInput = document.getElementById('comment-captcha-answer');
+  const captchaVal = Number(captchaInput.value);
+  if (!captchaInput.value || captchaVal !== commentCaptchaAnswer) {
+    feedback.textContent = 'Jawaban captcha salah, coba lagi.';
+    feedback.className = 'comment-feedback error';
+    initCommentCaptcha(); // soal baru supaya tidak bisa ditebak berulang dgn soal yg sama
+    return;
+  }
 
   const lastSent = Number(localStorage.getItem('lastCommentAt') || 0);
   const elapsed = Date.now() - lastSent;
@@ -1220,6 +1289,7 @@ async function submitComment(e) {
     feedback.className = 'comment-feedback success';
     document.getElementById('comment-form').reset();
     document.getElementById('comment-counter').textContent = '0/1000';
+    initCommentCaptcha();
   } catch (err) {
     feedback.textContent = 'Gagal mengirim komentar. Coba lagi.';
     feedback.className = 'comment-feedback error';

@@ -39,6 +39,7 @@
       <button class="nav-btn" data-tab="tab-sampah">
         Sampah <span id="badge-sampah" class="badge" style="display:none">0</span>
       </button>
+      <button class="nav-btn" data-tab="tab-log">Log Aktivitas</button>
       <button class="nav-btn" data-tab="tab-setting">Setting</button>
     </nav>
     <div class="topbar-actions">
@@ -198,6 +199,22 @@
       <h2>Sampah</h2>
       <p class="setting-hint">Orang yang dihapus dari tab Data Orang muncul di sini dulu, bukan langsung hilang. Bisa dipulihkan kapan saja, atau dihapus permanen kalau memang sudah yakin.</p>
       <div id="trash-list"></div>
+    </section>
+
+    <!-- TAB: LOG AKTIVITAS (audit log -- siapa mengubah apa & kapan) -->
+    <section id="tab-log" class="tab-panel">
+      <div class="panel-header">
+        <h2>Log Aktivitas</h2>
+        <div>
+          <button id="btn-auditlog-cleanup" class="btn-secondary" title="Hapus entri log yang lebih lama dari 90 hari, murni untuk kerapian/kuota">Bersihkan Log Lebih Lama dari 90 Hari</button>
+        </div>
+      </div>
+      <p class="setting-hint">Catatan siapa menambah/mengubah/menghapus data, kapan, dan aksi apa yang dilakukan -- berguna untuk melacak perubahan data, terutama kalau suatu saat lebih dari 1 orang punya akses admin. Log ini hanya bisa dilihat lewat panel admin, tidak tampil ke publik.</p>
+      <div id="auditlog-feedback" class="comment-feedback"></div>
+      <div id="auditlog-list"></div>
+      <div class="pagination-controls" style="justify-content:center;margin-top:10px">
+        <button id="btn-auditlog-more" class="btn-secondary" style="display:none">Muat Lebih Banyak</button>
+      </div>
     </section>
 
     <!-- TAB: JELAJAH KELUARGA (mode kartu, drill-down per keturunan -- sama seperti tampilan publik) -->
