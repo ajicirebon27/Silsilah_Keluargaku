@@ -583,6 +583,8 @@ function setupLaporanModal() {
     searchInput.focus();
     renderLaporanSearchResults('');
   });
+
+  setupKinshipChecker();
 }
 
 function openLaporanModal() {
@@ -591,6 +593,43 @@ function openLaporanModal() {
   document.getElementById('laporan-search-results').innerHTML = '';
   document.getElementById('laporan-detail').style.display = 'none';
   laporanSelectedId = null;
+  const kinshipSearch = document.getElementById('kinship-search');
+  if (kinshipSearch) kinshipSearch.value = '';
+  const kinshipResults = document.getElementById('kinship-search-results');
+  if (kinshipResults) kinshipResults.innerHTML = '';
+  const kinshipResult = document.getElementById('kinship-result');
+  if (kinshipResult) kinshipResult.innerHTML = '';
+}
+
+// ---------- Cek Hubungan Kekerabatan (antar 2 orang) ----------
+function setupKinshipChecker() {
+  const input = document.getElementById('kinship-search');
+  if (!input) return;
+  input.addEventListener('input', () => renderKinshipSearchResults(input.value));
+}
+
+function renderKinshipSearchResults(query) {
+  const box = document.getElementById('kinship-search-results');
+  const q = query.trim().toLowerCase();
+  if (!q) { box.innerHTML = ''; return; }
+
+  const matches = allPeople
+    .filter(p => p.id !== laporanSelectedId && p.nama.toLowerCase().includes(q))
+    .slice(0, 8);
+  box.innerHTML = matches.map(p => `
+    <div class="relasi-result-item" onclick="selectKinshipPerson('${p.id}')">
+      ${escapeHtml(p.nama)} <span class="relasi-result-sub">(${escapeHtml(p.jenisKelamin || '-')})</span>
+    </div>
+  `).join('') || '<div class="relasi-result-empty">Tidak ditemukan.</div>';
+}
+
+function selectKinshipPerson(id) {
+  const personA = allPeople.find(p => p.id === laporanSelectedId);
+  const personB = allPeople.find(p => p.id === id);
+  if (!personA || !personB) return;
+  document.getElementById('kinship-search').value = '';
+  document.getElementById('kinship-search-results').innerHTML = '';
+  document.getElementById('kinship-result').innerHTML = KinshipView.buildResultHTML(personA, personB, allPeople, allMarriages);
 }
 
 function closeLaporanModal() {
@@ -623,6 +662,11 @@ function selectLaporanPerson(id) {
   const lines = RelationRules.generateNarrative(id, allPeople, allMarriages);
   const listEl = document.getElementById('laporan-narrative-list');
   listEl.innerHTML = lines.map(l => `<li>${escapeHtml(l)}</li>`).join('') || '<li>Belum ada informasi relasi yang bisa ditampilkan.</li>';
+
+  // Anchor kekerabatan berganti -- kosongkan pencarian & hasil cek hubungan sebelumnya
+  document.getElementById('kinship-search').value = '';
+  document.getElementById('kinship-search-results').innerHTML = '';
+  document.getElementById('kinship-result').innerHTML = '';
 }
 
 // ---------- Sub Keluarga (pohon dipersempit: pasangan + anak + cucu saja) ----------

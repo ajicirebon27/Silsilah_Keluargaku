@@ -1,5 +1,31 @@
 # Silsilah Keluarga — Panduan Setup
 
+> **Baru di versi ini (v20) -- Cek Hubungan Kekerabatan antar 2 orang:**
+> Sebelumnya, tab **Laporan** (admin) dan Modal **Laporan** (publik) hanya
+> menjelaskan posisi 1 orang relatif ke leluhurnya sendiri ("anak dari...",
+> "cucu dari...", "kakak/adik dari..."). Tidak ada cara untuk mengecek
+> sebutan kekerabatan antara 2 orang yang dipilih bebas -- padahal ini salah
+> satu yang paling sering ditanyakan saat kumpul keluarga besar ("aku
+> manggil dia apa ya?"). Sekarang:
+> - Di bagian bawah kartu Laporan (setelah memilih 1 orang seperti biasa),
+>   ada kotak baru **"Cek Hubungan Kekerabatan dengan Orang Lain"** --
+>   tinggal cari & pilih 1 orang lagi, sistem langsung menampilkan sebutan
+>   kekerabatan dari kedua arah (mis. "Eko adalah Keponakan Laki-laki dari
+>   Budi" & "Budi adalah Paman dari Eko").
+> - Mencakup hubungan darah (anak/cucu/cicit/canggah ke bawah, ayah/kakek/
+>   buyut ke atas, saudara kandung/tiri, paman/bibi & keponakan, sepupu
+>   berbagai tingkat termasuk yang "beda generasi" mis. "Sepupu Tingkat 1
+>   (beda 1 generasi)"), maupun hubungan lewat pernikahan (suami/istri,
+>   mertua, menantu, anak/orang tua tiri, ipar -- termasuk ipar "silang"
+>   antar pasangan dari 2 orang yang bersaudara).
+> - Kalau tidak ditemukan hubungan (mis. memang beda keluarga, atau data
+>   leluhur/relasinya belum lengkap sampai ketemu leluhur bersama), sistem
+>   menampilkan pesan yang jelas -- bukan diam-diam kosong.
+> - Logika perhitungannya murni dari data ayah/ibu yang sudah ada (cari
+>   leluhur bersama terdekat lalu bandingkan jaraknya), tidak perlu input
+>   data tambahan apapun. Lihat `RelationRules.calculateKinship()` di
+>   `js/db.js` untuk detail lengkapnya, dan `KinshipView` untuk tampilannya.
+
 > **Baru di versi ini (v19) -- PWA benar-benar bisa dipakai offline, & Ekspor/Impor GEDCOM:**
 > 1. **Data pohon keluarga kini tersimpan offline di perangkat.** Sebelumnya
 >    service worker cuma menyimpan file HTML/CSS/JS (cangkang aplikasi) --

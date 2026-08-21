@@ -866,6 +866,183 @@ const RelationRules = {
     };
   },
 
+  // =====================================================================
+  // KALKULATOR HUBUNGAN KEKERABATAN ANTAR 2 ORANG
+  // (mis. "sepupu tingkat berapa", "paman/bibi", "mertua", "ipar", dst.)
+  //
+  // Cara kerja singkat: telusuri SEMUA leluhur (ayah & ibu, terus ke atas)
+  // dari kedua orang beserta jaraknya (jumlah generasi), lalu cari leluhur
+  // bersama yang PALING DEKAT (LCA -- Lowest/Nearest Common Ancestor).
+  // Dari jarak masing-masing orang ke leluhur bersama itu, jenis hubungan
+  // (garis lurus / saudara / paman-bibi-keponakan / sepupu) bisa ditentukan
+  // tanpa perlu tabel hubungan yang ditulis manual satu-satu.
+  //
+  // Hubungan lewat pernikahan (mertua/menantu/ipar/suami-istri) dihitung
+  // dengan cara yang sama, tinggal "melompat" dulu lewat pasangan sebelum
+  // mengulang pencarian hubungan darah di atas.
+  // =====================================================================
+
+  // Sebutan garis leluhur (ke ATAS) sejauh d generasi, gender = jenis kelamin
+  // ORANG yang posisinya leluhur itu (menentukan Ayah/Ibu, Kakek/Nenek, dst.)
+  ascendTerm(d, gender) {
+    if (d === 1) return gender === 'Laki-laki' ? 'Ayah' : gender === 'Perempuan' ? 'Ibu' : 'Orang Tua';
+    if (d === 2) return gender === 'Laki-laki' ? 'Kakek' : gender === 'Perempuan' ? 'Nenek' : 'Kakek/Nenek';
+    const base = { 3: 'Buyut', 4: 'Canggah', 5: 'Wareng' }[d];
+    return base || `Leluhur (generasi ke-${d} ke atas)`;
+  },
+
+  // Sebutan garis keturunan (ke BAWAH) sejauh d generasi, gender = jenis
+  // kelamin orang yang posisinya keturunan itu (Anak, Cucu, dst.)
+  descendTerm(d, gender) {
+    if (d === 1) return gender === 'Laki-laki' ? 'Anak Laki-laki' : gender === 'Perempuan' ? 'Anak Perempuan' : 'Anak';
+    if (d === 2) return gender === 'Laki-laki' ? 'Cucu Laki-laki' : gender === 'Perempuan' ? 'Cucu Perempuan' : 'Cucu';
+    const base = { 3: 'Cicit', 4: 'Canggah', 5: 'Wareng' }[d];
+    return base || `Keturunan (generasi ke-${d} ke bawah)`;
+  },
+
+  // Kumpulkan SEMUA leluhur (ayah & ibu, terus ke atas) dari seseorang,
+  // beserta jarak (jumlah generasi) tiap leluhur -- termasuk diri sendiri
+  // di jarak 0. maxDepth menjaga dari data melingkar/korup.
+  collectAncestorsWithDepth(personId, people, marriages, maxDepth = 12) {
+    const depths = new Map([[personId, 0]]);
+    const queue = [[personId, 0]];
+    while (queue.length) {
+      const [id, d] = queue.shift();
+      if (d >= maxDepth) continue;
+      const { ayah, ibu } = this.getParents(id, people, marriages);
+      [ayah, ibu].forEach(p => {
+        if (p && (!depths.has(p.id) || depths.get(p.id) > d + 1)) {
+          depths.set(p.id, d + 1);
+          queue.push([p.id, d + 1]);
+        }
+      });
+    }
+    return depths;
+  },
+
+  // Cari leluhur bersama yang paling dekat antara idA & idB (jarak total
+  // paling kecil). null kalau tidak ditemukan leluhur bersama sama sekali
+  // (kemungkinan memang tidak berkerabat lewat garis darah, atau data
+  // silsilahnya belum lengkap sampai ke leluhur yang sama).
+  findNearestCommonAncestor(idA, idB, people, marriages) {
+    const depthsA = this.collectAncestorsWithDepth(idA, people, marriages);
+    const depthsB = this.collectAncestorsWithDepth(idB, people, marriages);
+    let best = null;
+    depthsA.forEach((dA, id) => {
+      if (depthsB.has(id)) {
+        const dB = depthsB.get(id);
+        const total = dA + dB;
+        if (!best || total < best.total) best = { id, dA, dB, total };
+      }
+    });
+    return best;
+  },
+
+  // Tentukan sebutan hubungan DARAH: "idB adalah ___ dari idA". Return null
+  // kalau tidak ada leluhur bersama (bukan berarti pasti tidak berkerabat --
+  // bisa juga lewat pernikahan, lihat calculateKinship). idA === idB tidak
+  // ditangani di sini (ditangani di calculateKinship).
+  describeBloodRelation(idA, idB, people, marriages) {
+    const peopleMap = new Map(people.map(p => [p.id, p]));
+    const B = peopleMap.get(idB);
+    if (!B) return null;
+    const lca = this.findNearestCommonAncestor(idA, idB, people, marriages);
+    if (!lca) return null;
+    const { dA, dB } = lca;
+
+    // Garis lurus: idA sendiri leluhurnya idB, atau sebaliknya
+    if (dA === 0) return { label: this.descendTerm(dB, B.jenisKelamin), type: 'descend', depth: dB };
+    if (dB === 0) return { label: this.ascendTerm(dA, B.jenisKelamin), type: 'ascend', depth: dA };
+
+    const min = Math.min(dA, dB);
+    const removed = Math.abs(dA - dB);
+
+    // Saudara kandung/tiri (sama-sama anak dari leluhur bersama)
+    if (min === 1 && removed === 0) {
+      const pA = this.getParents(idA, people, marriages);
+      const pB = this.getParents(idB, people, marriages);
+      const kandung = pA.ayah && pB.ayah && pA.ayah.id === pB.ayah.id &&
+                      pA.ibu && pB.ibu && pA.ibu.id === pB.ibu.id;
+      const genderWord = B.jenisKelamin === 'Laki-laki' ? ' (laki-laki)' : B.jenisKelamin === 'Perempuan' ? ' (perempuan)' : '';
+      return { label: (kandung ? 'Saudara Kandung' : 'Saudara Tiri') + genderWord, type: 'saudara', depth: 1 };
+    }
+
+    // Paman/Bibi <-> Keponakan (beda 1 generasi dari leluhur bersama)
+    if (min === 1 && removed === 1) {
+      if (dB === 2) return { label: B.jenisKelamin === 'Laki-laki' ? 'Keponakan Laki-laki' : B.jenisKelamin === 'Perempuan' ? 'Keponakan Perempuan' : 'Keponakan', type: 'keponakan', depth: 1 };
+      return { label: B.jenisKelamin === 'Laki-laki' ? 'Paman' : B.jenisKelamin === 'Perempuan' ? 'Bibi/Tante' : 'Paman/Bibi', type: 'paman_bibi', depth: 1 };
+    }
+
+    // Paman/Bibi & Keponakan "jauh" (beda >=2 generasi, mis. saudara kakek/nenek)
+    if (min === 1 && removed >= 2) {
+      if (dB > dA) return { label: `${this.descendTerm(removed, B.jenisKelamin)} dari Saudara (Keponakan generasi ke-${removed})`, type: 'keponakan_jauh', depth: removed };
+      return { label: `Saudara dari ${this.ascendTerm(removed, null)} (Paman/Bibi generasi ke-${removed})`, type: 'paman_bibi_jauh', depth: removed };
+    }
+
+    // Sepupu (leluhur bersama sama-sama >=2 generasi dari keduanya)
+    const tingkat = min - 1;
+    if (removed === 0) return { label: `Sepupu Tingkat ${tingkat}`, type: 'sepupu', tingkat, removed: 0 };
+    return { label: `Sepupu Tingkat ${tingkat} (beda ${removed} generasi)`, type: 'sepupu', tingkat, removed };
+  },
+
+  // Hitung hubungan kekerabatan LENGKAP (darah maupun lewat pernikahan)
+  // antara idA & idB. Return { role, type, notFound, sameParty } di mana
+  // `role` adalah SEBUTAN saja (mis. "Sepupu Tingkat 2"), belum berupa
+  // kalimat lengkap -- kalimatnya disusun di KinshipView (supaya bisa
+  // dipakai membentuk "B adalah <role> dari A" maupun sebaliknya).
+  calculateKinship(idA, idB, people, marriages) {
+    const peopleMap = new Map(people.map(p => [p.id, p]));
+    const B = peopleMap.get(idB);
+    if (!peopleMap.get(idA) || !B) return { role: null, notFound: true };
+    if (idA === idB) return { role: null, sameParty: true };
+
+    // 1. Hubungan darah langsung
+    const blood = this.describeBloodRelation(idA, idB, people, marriages);
+    if (blood) return { role: blood.label, type: blood.type };
+
+    const iparWord = (gender) => gender === 'Laki-laki' ? 'Ipar Laki-laki' : gender === 'Perempuan' ? 'Ipar Perempuan' : 'Ipar';
+
+    // 2. Pasangan langsung (suami/istri)
+    const spousesA = this.getSpouseIds(idA, marriages);
+    if (spousesA.includes(idB)) {
+      const label = B.jenisKelamin === 'Laki-laki' ? 'Suami' : B.jenisKelamin === 'Perempuan' ? 'Istri' : 'Pasangan';
+      const note = spousesA.length > 1 ? ' (salah satu pasangan)' : '';
+      return { role: label + note, type: 'pasangan' };
+    }
+
+    // 3. Kerabat lewat pasangan A (mis. mertua, ipar, anak tiri)
+    for (const sId of spousesA) {
+      const rel = this.describeBloodRelation(sId, idB, people, marriages);
+      if (!rel) continue;
+      if (rel.type === 'ascend') return { role: `${this.ascendTerm(rel.depth, B.jenisKelamin)} Mertua`, type: 'mertua' };
+      if (rel.type === 'descend') return { role: `${this.descendTerm(rel.depth, B.jenisKelamin)} Tiri`, type: 'anak_tiri' };
+      if (rel.type === 'saudara') return { role: iparWord(B.jenisKelamin), type: 'ipar' };
+    }
+
+    // 4. Kerabat lewat pasangan B (mis. menantu, orang tua tiri, ipar)
+    const spousesB = this.getSpouseIds(idB, marriages);
+    for (const sId of spousesB) {
+      const rel = this.describeBloodRelation(idA, sId, people, marriages);
+      if (!rel) continue;
+      if (rel.type === 'descend' && rel.depth === 1) return { role: B.jenisKelamin === 'Laki-laki' ? 'Menantu Laki-laki' : B.jenisKelamin === 'Perempuan' ? 'Menantu Perempuan' : 'Menantu', type: 'menantu' };
+      if (rel.type === 'ascend') return { role: `${this.ascendTerm(rel.depth, B.jenisKelamin)} Tiri`, type: 'ortu_tiri' };
+      if (rel.type === 'saudara') return { role: iparWord(B.jenisKelamin), type: 'ipar' };
+    }
+
+    // 5. Ipar "silang": pasangan A adalah saudara dari pasangan B (mis. istri
+    // dari kakak seseorang, dilihat dari istri adiknya -- keduanya biasa
+    // sama-sama disebut "ipar" walau tidak ada satupun yang saudara kandung
+    // dgn pasangan lawannya secara langsung).
+    for (const sA of spousesA) {
+      for (const sB of spousesB) {
+        const rel = this.describeBloodRelation(sA, sB, people, marriages);
+        if (rel && rel.type === 'saudara') return { role: iparWord(B.jenisKelamin), type: 'ipar' };
+      }
+    }
+
+    return { role: null, notFound: true };
+  },
+
   // Hitung generasi seseorang, dihitung sejak leluhur paling awal yang tercatat
   // di jalur silsilahnya (leluhur = generasi 1). Jika ada dua jalur (ayah & ibu)
   // dengan kedalaman berbeda, dipakai jalur TERPANJANG (leluhur paling jauh yang diketahui).
@@ -1437,6 +1614,44 @@ const BiodataView = {
         </div>
       </div>
     `;
+  }
+};
+
+// Membangun tampilan HTML hasil "Cek Hubungan Kekerabatan" antara 2 orang
+// (dipakai bareng oleh tab Laporan admin & modal Laporan publik). Logika
+// perhitungannya sendiri ada di RelationRules.calculateKinship() di atas --
+// di sini cuma menyusun kalimatnya jadi HTML siap tampil.
+const KinshipView = {
+  buildResultHTML(personA, personB, people, marriages) {
+    const namaA = escapeHtml(personA.nama || '-');
+    const namaB = escapeHtml(personB.nama || '-');
+    const bDariA = RelationRules.calculateKinship(personA.id, personB.id, people, marriages);
+    const aDariB = RelationRules.calculateKinship(personB.id, personA.id, people, marriages);
+
+    if (bDariA.sameParty) {
+      return `<div class="biodata-relasi-box kinship-result-box"><p class="kinship-empty">Itu orang yang sama.</p></div>`;
+    }
+
+    const lines = [];
+    if (bDariA.role) {
+      lines.push(`<strong>${namaB}</strong> adalah <strong>${escapeHtml(bDariA.role)}</strong> dari <strong>${namaA}</strong>.`);
+    }
+    // Hindari baris duplikat kalau sebutannya sama persis dari 2 arah (mis. sepupu, yang memang simetris)
+    if (aDariB.role && aDariB.role !== bDariA.role) {
+      lines.push(`<strong>${namaA}</strong> adalah <strong>${escapeHtml(aDariB.role)}</strong> dari <strong>${namaB}</strong>.`);
+    }
+
+    if (!lines.length) {
+      return `<div class="biodata-relasi-box kinship-result-box">
+        <h3 class="biodata-relasi-title">Hasil Cek Hubungan</h3>
+        <p class="kinship-empty">Belum ditemukan hubungan kekerabatan antara <strong>${namaA}</strong> dan <strong>${namaB}</strong> lewat data yang tercatat (bisa jadi memang beda keluarga, atau ada data relasi/leluhur yang belum lengkap).</p>
+      </div>`;
+    }
+
+    return `<div class="biodata-relasi-box kinship-result-box">
+      <h3 class="biodata-relasi-title">Hasil Cek Hubungan</h3>
+      <ul class="narrative-list">${lines.map(l => `<li>${l}</li>`).join('')}</ul>
+    </div>`;
   }
 };
 
