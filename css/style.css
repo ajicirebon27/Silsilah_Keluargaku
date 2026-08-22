@@ -460,6 +460,15 @@ body {
 }
 .tree-node.search-focus .node-rect { stroke: #E0A93B; stroke-width: 3; }
 
+/* Fokus keyboard (Tab) pada kotak orang & lencana +/- di pohon keluarga.
+   `box-shadow` dari aturan [tabindex]:focus-visible umum tidak berlaku pada
+   elemen SVG, jadi kotak & lencana ini butuh gaya fokusnya sendiri lewat
+   `stroke` supaya pengguna keyboard tetap bisa melihat posisi fokusnya. */
+.tree-node:focus-visible { outline: none; }
+.tree-node:focus-visible .node-rect { stroke: var(--blue-soft, #4F7CAC); stroke-width: 3; }
+.tree-toggle:focus-visible { outline: none; }
+.tree-toggle:focus-visible .toggle-badge-rect { stroke: var(--blue-soft, #4F7CAC); stroke-width: 2; }
+
 .zoom-controls {
   position: fixed;
   right: 16px;

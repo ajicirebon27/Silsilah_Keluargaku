@@ -4,7 +4,11 @@
 // (semua file statis) benar-benar lengkap, supaya baik tampilan publik
 // maupun admin bisa dibuka offline (data orang/pernikahan sendiri diambil
 // dari cache Firestore -- lihat enablePersistence() di js/firebase-config.js).
-const CACHE_NAME = 'silsilah-cache-v8';
+// v9: tambahkan js/theme.js yang TERLEWAT dari daftar v8 -- file ini dimuat
+// oleh index.html maupun admin.html (toggle mode terang/gelap), tapi
+// sebelumnya tidak ikut dicache app-shell, jadi request-nya bisa gagal saat
+// offline (mis. instalasi baru yang langsung dipakai tanpa sinyal).
+const CACHE_NAME = 'silsilah-cache-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -16,6 +20,7 @@ const ASSETS = [
   './js/tree.js',
   './js/app.js',
   './js/admin.js',
+  './js/theme.js',
   './js/searchable-select.js',
   './manifest.json',
   './icons/icon-192.png',

@@ -897,7 +897,10 @@ function renderTreeSVG(container, people, marriages, onNodeClick, rootIds) {
   const width = Math.max(maxX + 60, 400);
   const height = Math.max(maxY + 60, 300);
 
-  let svg = `<svg id="tree-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`;
+  // aria-label ringkas di root SVG supaya pembaca layar setidaknya tahu ini
+  // adalah diagram pohon keluarga berisi berapa orang, sebelum masuk ke tiap
+  // kotak orang satu-satu (yang masing-masing diberi label sendiri di bawah).
+  let svg = `<svg id="tree-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram pohon keluarga, ${visiblePeople.length} orang ditampilkan">`;
 
   visibleMarriages.forEach(m => {
     const p1 = positions.get(m.orangId1);
@@ -998,15 +1001,28 @@ function renderTreeSVG(container, people, marriages, onNodeClick, rootIds) {
       const hiddenCount = hiddenCountByCollapsedId.get(p.id) || 0;
       const badgeLabel = isCollapsed ? `+${hiddenCount}` : '\u2212';
       const badgeW = isCollapsed ? Math.max(20, 10 + String(hiddenCount).length * 7) : 18;
+      // role="button" + tabindex supaya lencana ini bisa dijangkau & dipicu
+      // lewat keyboard (Tab lalu Enter/Space), tidak cuma klik mouse/sentuh --
+      // sebelumnya SVG <g> ini sama sekali tidak masuk urutan fokus keyboard.
+      const toggleAriaLabel = isCollapsed
+        ? `Tampilkan ${hiddenCount} keturunan ${escapeHtml(p.nama)} yang sedang disembunyikan`
+        : `Sembunyikan keturunan ${escapeHtml(p.nama)}`;
       toggleSvg = `
-        <g class="tree-toggle" data-toggle-id="${p.id}" transform="translate(${NODE_W / 2 - badgeW / 2},${NODE_H - 9})" style="cursor:pointer">
+        <g class="tree-toggle" data-toggle-id="${p.id}" transform="translate(${NODE_W / 2 - badgeW / 2},${NODE_H - 9})" style="cursor:pointer" role="button" tabindex="0" aria-label="${toggleAriaLabel}">
           <rect width="${badgeW}" height="18" rx="9" class="toggle-badge-rect ${isCollapsed ? 'toggle-badge-collapsed' : ''}"/>
           <text x="${badgeW / 2}" y="13" text-anchor="middle" class="toggle-badge-text">${badgeLabel}</text>
         </g>`;
     }
 
+    // Label lengkap per orang (nama, jenis kelamin, status wafat) supaya
+    // pembaca layar mendapat info yang sama dengan yang terlihat visual di
+    // kotak -- sebelumnya kotak ini (SVG <g>) tidak punya nama aksesibel
+    // sama sekali dan tidak bisa dijangkau keyboard.
+    const nodeAriaLabel = `${escapeHtml(p.nama)}, ${escapeHtml(p.jenisKelamin || 'jenis kelamin tidak diketahui')}${wafat ? ', sudah wafat' : ''}`;
+
     svg += `
-      <g class="tree-node ${cls}" data-id="${p.id}" transform="translate(${pos.x},${pos.y})">
+      <g class="tree-node ${cls}" data-id="${p.id}" transform="translate(${pos.x},${pos.y})" role="button" tabindex="0" aria-label="${nodeAriaLabel}">
+        <title>${nodeAriaLabel}</title>
         <rect width="${NODE_W}" height="${NODE_H}" rx="10" class="node-rect" style="cursor:pointer"/>
         <text x="${NODE_W / 2}" y="26" text-anchor="middle" class="node-name" style="cursor:pointer">${escapeHtml(truncate(p.nama, 16))}</text>
         <text x="${NODE_W / 2}" y="44" text-anchor="middle" class="node-sub" style="cursor:pointer">${escapeHtml(p.jenisKelamin || '')}${wafat}</text>
@@ -1023,11 +1039,28 @@ function renderTreeSVG(container, people, marriages, onNodeClick, rootIds) {
     node.querySelectorAll('.node-rect, .node-name, .node-sub').forEach(el => {
       el.addEventListener('click', () => onNodeClick(node.dataset.id));
     });
+    // Dukungan keyboard: Enter/Space pada kotak yang sedang fokus membuka
+    // form edit/detail yang sama seperti diklik mouse.
+    node.addEventListener('keydown', (e) => {
+      if (e.target.closest('.tree-toggle')) return; // biar tidak dobel dgn handler toggle di bawah
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onNodeClick(node.dataset.id);
+      }
+    });
   });
   container.querySelectorAll('.tree-toggle').forEach(toggle => {
     toggle.addEventListener('click', (e) => {
       e.stopPropagation();
       toggleTreeNode(container, toggle.dataset.toggleId);
+    });
+    // Dukungan keyboard utk lencana +/- (Enter/Space), setara dgn klik.
+    toggle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleTreeNode(container, toggle.dataset.toggleId);
+      }
     });
   });
 }
