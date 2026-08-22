@@ -277,7 +277,7 @@ function setupSearch() {
     suggestBox.innerHTML = matches.length
       ? matches.map(p => `
           <div class="tree-search-suggest-item" data-id="${p.id}">
-            ${escapeHtml(p.nama)} <span class="tree-search-suggest-sub">(${escapeHtml(p.jenisKelamin || '-')})</span>
+            ${escapeHtml(p.nama)} <span class="tree-search-suggest-sub">(${escapeHtml(p.jenisKelamin || '-')}${escapeHtml(getPasanganLabelSuffix(p.id, allPeople, allMarriages))})</span>
           </div>
         `).join('')
       : '<div class="tree-search-suggest-empty">Tidak ditemukan.</div>';
@@ -619,7 +619,7 @@ function renderKinshipSearchResults(query) {
     .slice(0, 8);
   box.innerHTML = matches.map(p => `
     <div class="relasi-result-item" onclick="selectKinshipPerson('${p.id}')">
-      ${escapeHtml(p.nama)} <span class="relasi-result-sub">(${escapeHtml(p.jenisKelamin || '-')})</span>
+      ${escapeHtml(p.nama)} <span class="relasi-result-sub">(${escapeHtml(p.jenisKelamin || '-')}${escapeHtml(getPasanganLabelSuffix(p.id, allPeople, allMarriages))})</span>
     </div>
   `).join('') || '<div class="relasi-result-empty">Tidak ditemukan.</div>';
 }
@@ -645,7 +645,7 @@ function renderLaporanSearchResults(query) {
   const matches = allPeople.filter(p => p.nama.toLowerCase().includes(q)).slice(0, 8);
   box.innerHTML = matches.map(p => `
     <div class="relasi-result-item" onclick="selectLaporanPerson('${p.id}')">
-      ${escapeHtml(p.nama)} <span class="relasi-result-sub">(${escapeHtml(p.jenisKelamin || '-')})</span>
+      ${escapeHtml(p.nama)} <span class="relasi-result-sub">(${escapeHtml(p.jenisKelamin || '-')}${escapeHtml(getPasanganLabelSuffix(p.id, allPeople, allMarriages))})</span>
     </div>
   `).join('') || '<div class="relasi-result-empty">Tidak ditemukan.</div>';
 }

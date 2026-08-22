@@ -79,6 +79,33 @@ function getUsiaTahun(tglLahir, tglWafat, today = new Date()) {
 // HP dengan layar kecil TAPI viewport tiba-tiba lebar & bisa disentuh --
 // itu ciri khas mode Situs Desktop sedang aktif.
 // =====================================================================
+// Ambil daftar nama pasangan (suami/istri) dari seseorang, berdasarkan data
+// marriages -- dipakai di berbagai tempat pencarian orang (tab Data Orang
+// admin, kotak pencarian pohon & "Cari Data" publik, dll) supaya nama
+// pasangan bisa ditampilkan sebagai info tambahan selain jenis kelamin.
+// Tujuannya membantu user/admin membedakan orang-orang yang kebetulan
+// namanya sama persis. Poligami: bisa lebih dari 1 nama, dipisah koma.
+function getPasanganNamaList(personId, allPeople, allMarriages) {
+  return (allMarriages || [])
+    .filter(m => m.orangId1 === personId || m.orangId2 === personId)
+    .map(m => {
+      const partnerId = m.orangId1 === personId ? m.orangId2 : m.orangId1;
+      const partner = allPeople.find(x => x.id === partnerId);
+      return partner ? partner.nama : null;
+    })
+    .filter(Boolean);
+}
+
+// Versi singkat siap-pakai utk ditempel di belakang label jenis kelamin pada
+// hasil pencarian, mis. "(Laki-laki)" -> "(Laki-laki · Pasangan: Siti)".
+// Return '' (bukan teks placeholder) kalau orang itu belum tercatat
+// pasangannya, supaya tidak menuduh orang "belum menikah" padahal cuma
+// belum sempat diisi relasinya.
+function getPasanganLabelSuffix(personId, allPeople, allMarriages) {
+  const nama = getPasanganNamaList(personId, allPeople, allMarriages);
+  return nama.length ? ` · Pasangan: ${nama.join(', ')}` : '';
+}
+
 function looksLikeForcedDesktopModeOnPhone() {
   try {
     const isTouchDevice = (navigator.maxTouchPoints || 0) > 0 ||

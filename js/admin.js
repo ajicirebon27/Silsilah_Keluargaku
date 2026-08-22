@@ -441,6 +441,10 @@ function renderPeopleTable(filter = currentPeopleFilter) {
     const genderCell = genderValid
       ? escapeHtml(p.jenisKelamin)
       : `<span class="gender-invalid" title="Jenis kelamin kosong/tidak baku -- orang ini TIDAK akan pernah terdeteksi sebagai ayah/ibu di manapun sampai ini diperbaiki lewat tombol Edit">${escapeHtml(p.jenisKelamin || '(kosong)')} ⚠️</span>`;
+    const pasanganNama = getPasanganNamaList(p.id, allPeople, allMarriages);
+    const pasanganCell = pasanganNama.length
+      ? escapeHtml(pasanganNama.join(', '))
+      : `<span class="pasangan-kosong">-</span>`;
     const checked = selectedPersonIds.has(p.id) ? 'checked' : '';
     const generasi = personGenerationMap.get(p.id);
     const usiaTitle = (() => {
@@ -453,6 +457,7 @@ function renderPeopleTable(filter = currentPeopleFilter) {
       <td class="checkbox-cell"><input type="checkbox" class="row-select-checkbox" data-id="${p.id}" ${checked}></td>
       <td>${escapeHtml(p.nama)}${badge}</td>
       <td>${genderCell}</td>
+      <td>${pasanganCell}</td>
       <td title="Generasi ke-berapa, dihitung dari leluhur paling awal yang tercatat di jalurnya">${generasi || '-'}</td>
       <td${usiaTitle ? ` title="${escapeHtml(usiaTitle)}"` : ''}>${formatDate(p.tglLahir)}</td>
       <td>${formatDate(p.tglWafat)}</td>
@@ -463,7 +468,7 @@ function renderPeopleTable(filter = currentPeopleFilter) {
       </td>
     </tr>
   `;
-  }).join('') || `<tr><td colspan="7" class="empty-row">${
+  }).join('') || `<tr><td colspan="8" class="empty-row">${
     isAdvancedFilterActive() ? 'Tidak ada data yang cocok dengan Filter Lanjutan yang sedang aktif.' :
     currentRelasiFilter === 'all' ? 'Belum ada data.' :
     currentRelasiFilter === 'sudah' ? 'Belum ada data yang sudah terelasi.' :
@@ -1442,7 +1447,7 @@ function renderKinshipSearchResults(query) {
     .slice(0, 8);
   box.innerHTML = matches.map(p => `
     <div class="relasi-result-item" onclick="selectKinshipPerson('${p.id}')">
-      ${escapeHtml(p.nama)} <span class="relasi-result-sub">(${escapeHtml(p.jenisKelamin || '-')})</span>
+      ${escapeHtml(p.nama)} <span class="relasi-result-sub">(${escapeHtml(p.jenisKelamin || '-')}${escapeHtml(getPasanganLabelSuffix(p.id, allPeople, allMarriages))})</span>
     </div>
   `).join('') || '<div class="relasi-result-empty">Tidak ditemukan.</div>';
 }
@@ -1464,7 +1469,7 @@ function renderLaporanSearchResults(query) {
   const matches = allPeople.filter(p => p.nama.toLowerCase().includes(q)).slice(0, 8);
   box.innerHTML = matches.map(p => `
     <div class="relasi-result-item" onclick="selectLaporanPerson('${p.id}')">
-      ${escapeHtml(p.nama)} <span class="relasi-result-sub">(${escapeHtml(p.jenisKelamin || '-')})</span>
+      ${escapeHtml(p.nama)} <span class="relasi-result-sub">(${escapeHtml(p.jenisKelamin || '-')}${escapeHtml(getPasanganLabelSuffix(p.id, allPeople, allMarriages))})</span>
     </div>
   `).join('') || '<div class="relasi-result-empty">Tidak ditemukan.</div>';
 }
