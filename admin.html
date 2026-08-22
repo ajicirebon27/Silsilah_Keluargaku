@@ -116,6 +116,12 @@
       <div id="admin-dashboard-content"></div>
 
       <div class="dashboard-recent-wrap">
+        <h3>Statistik per Generasi</h3>
+        <p class="setting-hint">Generasi 1 = leluhur paling awal yang tercatat di jalur masing-masing (sama seperti label generasi di tab Laporan). "Usia rata-rata" hanya menghitung orang yang tanggal lahirnya sudah tercatat; untuk yang sudah wafat dipakai usia saat wafat. "Rata-rata anak" dihitung per keluarga/pernikahan yang dibentuk generasi tsb.</p>
+        <div id="admin-dashboard-generasi"></div>
+      </div>
+
+      <div class="dashboard-recent-wrap">
         <h3>Orang yang Baru Ditambahkan</h3>
         <div id="admin-dashboard-recent"></div>
       </div>
@@ -133,8 +139,51 @@
             <option value="belum">⚠️ Belum Terelasi</option>
           </select>
         </div>
+        <button type="button" id="btn-toggle-adv-filter" class="btn-secondary adv-filter-toggle-btn">
+          Filter Lanjutan <span id="adv-filter-count-badge" class="adv-filter-count-badge" style="display:none"></span>
+        </button>
         <button id="btn-add-person" class="btn-primary">+ Tambah Orang</button>
       </div>
+
+      <div id="adv-filter-panel" class="adv-filter-panel" style="display:none">
+        <div class="adv-filter-row">
+          <div class="adv-filter-field">
+            <label for="adv-filter-generasi">Generasi</label>
+            <select id="adv-filter-generasi">
+              <option value="all">Semua Generasi</option>
+            </select>
+          </div>
+          <div class="adv-filter-field">
+            <label for="adv-filter-agama">Agama</label>
+            <select id="adv-filter-agama">
+              <option value="all">Semua Agama</option>
+              <option value="Islam">Islam</option>
+              <option value="Kristen">Kristen</option>
+              <option value="Katolik">Katolik</option>
+              <option value="Hindu">Hindu</option>
+              <option value="Buddha">Buddha</option>
+              <option value="Konghucu">Konghucu</option>
+              <option value="Lainnya">Lainnya</option>
+              <option value="__kosong__">Belum Diisi</option>
+            </select>
+          </div>
+          <div class="adv-filter-field">
+            <label for="adv-filter-domisili">Domisili/Alamat</label>
+            <input type="text" id="adv-filter-domisili" placeholder="mis. Cirebon">
+          </div>
+          <div class="adv-filter-field adv-filter-field-usia">
+            <label>Rentang Usia (tahun)</label>
+            <div class="adv-filter-usia-inputs">
+              <input type="number" id="adv-filter-usia-min" min="0" max="150" placeholder="Dari">
+              <span>&ndash;</span>
+              <input type="number" id="adv-filter-usia-max" min="0" max="150" placeholder="Sampai">
+            </div>
+          </div>
+          <button type="button" id="btn-reset-adv-filter" class="btn-link adv-filter-reset-btn">Reset Filter Lanjutan</button>
+        </div>
+        <p class="setting-hint adv-filter-hint">Filter Rentang Usia dihitung dari Tanggal Lahir (untuk yang sudah wafat, dipakai usia saat wafat); orang tanpa Tanggal Lahir tidak akan cocok dengan filter ini.</p>
+      </div>
+
       <div id="relasi-filter-summary" class="relasi-filter-summary"></div>
       <p id="gender-invalid-warning" class="gender-invalid-warning"></p>
       <div id="bulk-action-bar" class="bulk-action-bar" style="display:none">
@@ -149,7 +198,7 @@
       <table class="admin-table">
         <thead><tr>
           <th class="checkbox-cell"><input type="checkbox" id="select-all-checkbox" title="Pilih semua"></th>
-          <th>Nama</th><th>Jenis Kelamin</th><th>Lahir</th><th>Wafat</th><th>Aksi</th>
+          <th>Nama</th><th>Jenis Kelamin</th><th title="Generasi ke-berapa, dihitung dari leluhur paling awal yang tercatat di jalurnya">Gen</th><th>Lahir</th><th>Wafat</th><th>Aksi</th>
         </tr></thead>
         <tbody id="people-table-body"></tbody>
       </table>

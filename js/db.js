@@ -24,6 +24,41 @@ function escapeHtml(str) {
   })[c]);
 }
 
+// Hitung usia (dalam tahun genap) dari tglLahir -- dipakai bareng oleh filter
+// "Rentang Usia" (tab Data Orang admin) & statistik "Usia Rata-rata per
+// Generasi" (Dashboard admin). Kalau orangnya sudah wafat (tglWafat terisi),
+// yang dihitung adalah usia SAAT WAFAT (bukan usia kalau masih hidup sampai
+// sekarang) -- lebih masuk akal utk data leluhur yang sudah lama meninggal.
+// Kalau tglLahir kosong/tidak valid, return null (dianggap "tidak diketahui",
+// BUKAN 0) supaya tidak mencemari rata-rata atau lolos filter rentang usia
+// secara keliru.
+//
+// Parsing tanggal dilakukan manual lewat regex (bukan `new Date(string)`)
+// dengan alasan yang sama seperti BirthdayUtil.parseTanggal() di
+// birthday.js: menghindari salah hitung karena new Date('YYYY-MM-DD')
+// selalu diparse sebagai tengah malam UTC, yang bisa "mundur" 1 hari di
+// zona waktu Indonesia.
+function getUsiaTahun(tglLahir, tglWafat, today = new Date()) {
+  if (!tglLahir || typeof tglLahir !== 'string') return null;
+  const mLahir = tglLahir.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!mLahir) return null;
+  const lahir = { tahun: parseInt(mLahir[1], 10), bulan: parseInt(mLahir[2], 10), tanggal: parseInt(mLahir[3], 10) };
+
+  let acuan = { tahun: today.getFullYear(), bulan: today.getMonth() + 1, tanggal: today.getDate() };
+  if (tglWafat && typeof tglWafat === 'string') {
+    const mWafat = tglWafat.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (mWafat) acuan = { tahun: parseInt(mWafat[1], 10), bulan: parseInt(mWafat[2], 10), tanggal: parseInt(mWafat[3], 10) };
+  }
+
+  let usia = acuan.tahun - lahir.tahun;
+  // Kurangi 1 kalau ulang tahun di tahun acuan belum lewat (mis. lahir
+  // Desember, dihitung per Januari tahun yg sama -> belum genap setahun).
+  if (acuan.bulan < lahir.bulan || (acuan.bulan === lahir.bulan && acuan.tanggal < lahir.tanggal)) {
+    usia -= 1;
+  }
+  return usia >= 0 ? usia : null; // jaga-jaga data tanggal terbalik/salah input
+}
+
 // =====================================================================
 // NOTIFIKASI "MODE SITUS DESKTOP" DI HP -- PENTING DIBACA:
 // Tidak ada satupun kode website (HTML/CSS/JS) yang bisa MEMATIKAN toggle
@@ -1158,6 +1193,24 @@ const RelationRules = {
     };
   },
 
+  // Peta id-orang -> nomor generasi utk SEMUA orang sekaligus, dihitung lewat
+  // getGenerationInfo() di atas. Dipakai bareng oleh filter "Generasi" (tab
+  // Data Orang admin) & statistik per-generasi (Dashboard admin) supaya
+  // logika perhitungan generasi tetap 1 tempat saja (sama seperti yang
+  // sudah dipakai StatsAPI.computeBasicStats utk "Jumlah Generasi"). Orang
+  // yang datanya bikin loop aneh (mis. relasi melingkar) diam-diam dilewati
+  // (tidak masuk peta) -- ini bukan hal fatal utk statistik/filter,
+  // konsisten dengan penanganan yang sama di computeBasicStats.
+  getGenerationMap(people, marriages) {
+    const map = new Map();
+    people.forEach(p => {
+      try {
+        map.set(p.id, this.getGenerationInfo(p.id, people, marriages).generasi);
+      } catch (e) { /* abaikan, lihat catatan di atas */ }
+    });
+    return map;
+  },
+
   // v15: tentukan siapa yang jadi FOKUS DEFAULT saat pohon keluarga pertama
   // kali dibuka (dipakai bersama tampilan publik & tab "Pohon Keluarga" admin
   // -- lihat TreeControls.focusOn() di tree.js utk yang menggeser viewport-nya).
@@ -1477,6 +1530,66 @@ const StatsAPI = {
       default:
         return { title: '', rows: [] };
     }
+  },
+
+  // Statistik per generasi -- dipakai bagian "Statistik per Generasi" di tab
+  // Dashboard (admin): jumlah orang, usia rata-rata, & rata-rata jumlah anak
+  // per keluarga, dipecah per angka generasi (generasi 1 = leluhur paling
+  // awal yang tercatat di jalur masing-masing, sama seperti label generasi
+  // yang dipakai di tab Laporan -- lihat RelationRules.getGenerationInfo()).
+  //
+  // "Rata-rata jumlah anak" dihitung per KELUARGA/PERNIKAHAN (bukan per
+  // orang), dikelompokkan berdasarkan generasi salah satu pasangan
+  // (orangId1, atau orangId2 kalau orangId1 kosong/orang tua tunggal belum
+  // diketahui) -- supaya angkanya menjawab "rata-rata berapa anak per
+  // keluarga yang dibentuk generasi ini", sesuatu yang sering ditanyakan
+  // saat melihat tren jumlah anak antar generasi (mis. generasi lama
+  // cenderung py banyak anak, generasi muda lebih sedikit).
+  //
+  // "Usia rata-rata" HANYA menghitung orang yang tanggal lahirnya tercatat
+  // (lihat getUsiaTahun() di atas -- utk yang sudah wafat dipakai usia SAAT
+  // WAFAT, bukan usia kalau masih hidup sampai sekarang), supaya tidak
+  // dikira² dari data yang tidak lengkap.
+  computeGenerationBreakdown(people, marriages) {
+    const genMap = RelationRules.getGenerationMap(people, marriages);
+
+    const byGen = new Map(); // generasi -> { jumlahOrang, usiaList: [], anakPerKeluargaList: [] }
+    const bucketOf = (g) => {
+      if (!byGen.has(g)) byGen.set(g, { jumlahOrang: 0, usiaList: [], anakPerKeluargaList: [] });
+      return byGen.get(g);
+    };
+
+    people.forEach(p => {
+      const g = genMap.get(p.id);
+      if (!g) return; // dilewati (lihat catatan getGenerationMap)
+      const bucket = bucketOf(g);
+      bucket.jumlahOrang++;
+      const usia = getUsiaTahun(p.tglLahir, p.tglWafat);
+      if (usia !== null) bucket.usiaList.push(usia);
+    });
+
+    marriages.forEach(m => {
+      const parentId = m.orangId1 || m.orangId2;
+      if (!parentId) return;
+      const g = genMap.get(parentId);
+      if (!g) return;
+      bucketOf(g).anakPerKeluargaList.push((m.childIds || []).length);
+    });
+
+    const rataRata = (arr) => arr.length
+      ? Math.round((arr.reduce((s, x) => s + x, 0) / arr.length) * 10) / 10
+      : null;
+
+    return [...byGen.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([generasi, b]) => ({
+        generasi,
+        jumlahOrang: b.jumlahOrang,
+        usiaRataRata: rataRata(b.usiaList),
+        jumlahOrangUsiaDiketahui: b.usiaList.length,
+        totalKeluarga: b.anakPerKeluargaList.length,
+        rataRataAnak: rataRata(b.anakPerKeluargaList)
+      }));
   }
 };
 

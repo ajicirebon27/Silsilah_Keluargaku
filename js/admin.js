@@ -15,6 +15,17 @@ let currentRelasiFilter = 'all'; // 'all' | 'sudah' | 'belum'
 let selectedPersonIds = new Set();   // id orang yang dicentang di tab Data Orang
 let currentFilteredPersonIds = [];   // semua id yang cocok dgn pencarian + filter (semua halaman)
 
+// ---------- Filter Lanjutan (Tab Data Orang): generasi, agama, domisili, usia ----------
+// Peta id-orang -> nomor generasi, dihitung ulang tiap refreshAll() lewat
+// RelationRules.getGenerationMap() (js/db.js) supaya tidak perlu dihitung
+// ulang setiap kali tabel dirender (mis. saat mengetik di kotak cari).
+let personGenerationMap = new Map();
+let currentGenerasiFilter = 'all';        // 'all' | nomor generasi (string)
+let currentAgamaFilter = 'all';           // 'all' | '__kosong__' | nama agama
+let currentDomisiliFilter = '';           // substring, dicocokkan ke field alamat
+let currentUsiaMin = '';                  // '' | angka (string dari input)
+let currentUsiaMax = '';
+
 const authScreen = document.getElementById('auth-screen');
 const adminApp = document.getElementById('admin-app');
 
@@ -182,6 +193,8 @@ let adminTreeFocusApplied = false;
 
 async function refreshAll() {
   [allPeople, allMarriages] = await Promise.all([PeopleAPI.getAll(), MarriageAPI.getAll()]);
+  personGenerationMap = RelationRules.getGenerationMap(allPeople, allMarriages);
+  refreshGenerasiFilterOptions();
   renderPeopleTable();
   const adminTreeContainer = document.getElementById('admin-tree-container');
   // Admin menampilkan SEMUA keluarga sekaligus (tdk difilter spt publik) --
@@ -347,6 +360,43 @@ function belumIconSVG() {
   </svg>`;
 }
 
+// Cocokkan 1 orang terhadap filter lanjutan yang sedang aktif (Generasi,
+// Agama, Domisili, Rentang Usia). Dipisah jadi fungsi sendiri supaya bisa
+// dipakai juga dari tempat lain kalau perlu (mis. badge jumlah filter aktif)
+// tanpa duplikasi logika.
+function matchesAdvancedFilter(p) {
+  if (currentGenerasiFilter !== 'all') {
+    const g = personGenerationMap.get(p.id);
+    if (String(g || '') !== currentGenerasiFilter) return false;
+  }
+  if (currentAgamaFilter !== 'all') {
+    if (currentAgamaFilter === '__kosong__') {
+      if (p.agama) return false;
+    } else if (p.agama !== currentAgamaFilter) {
+      return false;
+    }
+  }
+  if (currentDomisiliFilter) {
+    const needle = currentDomisiliFilter.trim().toLowerCase();
+    if (!(p.alamat || '').toLowerCase().includes(needle)) return false;
+  }
+  if (currentUsiaMin !== '' || currentUsiaMax !== '') {
+    const usia = getUsiaTahun(p.tglLahir, p.tglWafat);
+    // Tanpa Tanggal Lahir -> usia tidak diketahui -> tidak bisa dinilai
+    // cocok/tidaknya dgn rentang usia, jadi dianggap tidak cocok (bukan
+    // diam-diam diloloskan, supaya hasil filter tetap bisa dipercaya).
+    if (usia === null) return false;
+    if (currentUsiaMin !== '' && usia < Number(currentUsiaMin)) return false;
+    if (currentUsiaMax !== '' && usia > Number(currentUsiaMax)) return false;
+  }
+  return true;
+}
+
+function isAdvancedFilterActive() {
+  return currentGenerasiFilter !== 'all' || currentAgamaFilter !== 'all' ||
+    currentDomisiliFilter !== '' || currentUsiaMin !== '' || currentUsiaMax !== '';
+}
+
 function renderPeopleTable(filter = currentPeopleFilter) {
   currentPeopleFilter = filter;
   const tbody = document.getElementById('people-table-body');
@@ -360,11 +410,12 @@ function renderPeopleTable(filter = currentPeopleFilter) {
   const sudahCount = searched.filter(p => hasRelasiSet(p.id)).length;
   const belumCount = searched.length - sudahCount;
 
-  // Terapkan filter status relasi di atas hasil pencarian nama
+  // Terapkan filter status relasi + filter lanjutan (generasi/agama/domisili/usia)
+  // di atas hasil pencarian nama.
   const filtered = searched.filter(p => {
-    if (currentRelasiFilter === 'sudah') return hasRelasiSet(p.id);
-    if (currentRelasiFilter === 'belum') return !hasRelasiSet(p.id);
-    return true;
+    if (currentRelasiFilter === 'sudah' && !hasRelasiSet(p.id)) return false;
+    if (currentRelasiFilter === 'belum' && hasRelasiSet(p.id)) return false;
+    return matchesAdvancedFilter(p);
   });
 
   const totalCount = filtered.length;
@@ -391,12 +442,19 @@ function renderPeopleTable(filter = currentPeopleFilter) {
       ? escapeHtml(p.jenisKelamin)
       : `<span class="gender-invalid" title="Jenis kelamin kosong/tidak baku -- orang ini TIDAK akan pernah terdeteksi sebagai ayah/ibu di manapun sampai ini diperbaiki lewat tombol Edit">${escapeHtml(p.jenisKelamin || '(kosong)')} ⚠️</span>`;
     const checked = selectedPersonIds.has(p.id) ? 'checked' : '';
+    const generasi = personGenerationMap.get(p.id);
+    const usiaTitle = (() => {
+      const usia = getUsiaTahun(p.tglLahir, p.tglWafat);
+      if (usia === null) return '';
+      return p.tglWafat ? `Usia saat wafat: ${usia} tahun` : `Usia saat ini: ${usia} tahun`;
+    })();
     return `
     <tr class="${checked ? 'row-selected' : ''}">
       <td class="checkbox-cell"><input type="checkbox" class="row-select-checkbox" data-id="${p.id}" ${checked}></td>
       <td>${escapeHtml(p.nama)}${badge}</td>
       <td>${genderCell}</td>
-      <td>${formatDate(p.tglLahir)}</td>
+      <td title="Generasi ke-berapa, dihitung dari leluhur paling awal yang tercatat di jalurnya">${generasi || '-'}</td>
+      <td${usiaTitle ? ` title="${escapeHtml(usiaTitle)}"` : ''}>${formatDate(p.tglLahir)}</td>
       <td>${formatDate(p.tglWafat)}</td>
       <td class="aksi-cell">
         <button class="btn-aksi btn-aksi-edit" onclick="openEditPerson('${p.id}')">Edit</button>
@@ -405,7 +463,8 @@ function renderPeopleTable(filter = currentPeopleFilter) {
       </td>
     </tr>
   `;
-  }).join('') || `<tr><td colspan="6" class="empty-row">${
+  }).join('') || `<tr><td colspan="7" class="empty-row">${
+    isAdvancedFilterActive() ? 'Tidak ada data yang cocok dengan Filter Lanjutan yang sedang aktif.' :
     currentRelasiFilter === 'all' ? 'Belum ada data.' :
     currentRelasiFilter === 'sudah' ? 'Belum ada data yang sudah terelasi.' :
     'Semua data sudah terelasi. 🎉'
@@ -414,6 +473,7 @@ function renderPeopleTable(filter = currentPeopleFilter) {
   renderGenderInvalidWarning();
   renderPeoplePagination(totalCount, totalPages);
   renderRelasiFilterSummary(searched.length, sudahCount, belumCount);
+  renderAdvFilterCountBadge();
   document.querySelectorAll('.row-select-checkbox').forEach(cb => {
     cb.addEventListener('change', () => {
       toggleRowSelect(cb.dataset.id, cb.checked);
@@ -552,6 +612,76 @@ function setRelasiFilter(value) {
   renderPeopleTable();
 }
 
+// ---------- Filter Lanjutan (Tab Data Orang): generasi, agama, domisili, usia ----------
+
+// Isi ulang opsi dropdown Generasi berdasarkan nomor generasi yang benar-benar
+// ada di data saat ini (bukan daftar tetap 1-10, dsb) -- dipanggil tiap
+// refreshAll() supaya ikut menyesuaikan begitu ada orang baru di generasi
+// yang lebih dalam. Kalau generasi yang sedang dipilih admin sudah tidak ada
+// lagi di data (mis. orang terakhir di generasi itu dihapus), filter otomatis
+// kembali ke "Semua Generasi" supaya tabel tidak diam-diam kosong tanpa sebab jelas.
+function refreshGenerasiFilterOptions() {
+  const selectEl = document.getElementById('adv-filter-generasi');
+  if (!selectEl) return;
+  const generasiSet = new Set([...personGenerationMap.values()].filter(Boolean));
+  const sorted = [...generasiSet].sort((a, b) => a - b);
+
+  if (currentGenerasiFilter !== 'all' && !generasiSet.has(Number(currentGenerasiFilter))) {
+    currentGenerasiFilter = 'all';
+  }
+
+  selectEl.innerHTML = `<option value="all">Semua Generasi</option>` +
+    sorted.map(g => `<option value="${g}">Generasi ke-${g}</option>`).join('');
+  selectEl.value = currentGenerasiFilter;
+}
+
+function renderAdvFilterCountBadge() {
+  const badge = document.getElementById('adv-filter-count-badge');
+  if (!badge) return;
+  let count = 0;
+  if (currentGenerasiFilter !== 'all') count++;
+  if (currentAgamaFilter !== 'all') count++;
+  if (currentDomisiliFilter !== '') count++;
+  if (currentUsiaMin !== '' || currentUsiaMax !== '') count++;
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function toggleAdvFilterPanel() {
+  const panel = document.getElementById('adv-filter-panel');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function applyAdvancedFilters() {
+  currentGenerasiFilter = document.getElementById('adv-filter-generasi').value;
+  currentAgamaFilter = document.getElementById('adv-filter-agama').value;
+  currentDomisiliFilter = document.getElementById('adv-filter-domisili').value;
+  currentUsiaMin = document.getElementById('adv-filter-usia-min').value;
+  currentUsiaMax = document.getElementById('adv-filter-usia-max').value;
+  currentPeoplePage = 1;
+  renderPeopleTable();
+}
+
+function resetAdvancedFilters() {
+  currentGenerasiFilter = 'all';
+  currentAgamaFilter = 'all';
+  currentDomisiliFilter = '';
+  currentUsiaMin = '';
+  currentUsiaMax = '';
+  document.getElementById('adv-filter-generasi').value = 'all';
+  document.getElementById('adv-filter-agama').value = 'all';
+  document.getElementById('adv-filter-domisili').value = '';
+  document.getElementById('adv-filter-usia-min').value = '';
+  document.getElementById('adv-filter-usia-max').value = '';
+  currentPeoplePage = 1;
+  renderPeopleTable();
+}
+
 function renderPeoplePagination(totalCount, totalPages) {
   const container = document.getElementById('people-pagination');
   if (!container) return;
@@ -619,6 +749,14 @@ document.getElementById('admin-relasi-filter').addEventListener('change', e => {
   setRelasiFilter(e.target.value);
 });
 document.getElementById('btn-add-person').addEventListener('click', () => openPersonForm(null));
+
+document.getElementById('btn-toggle-adv-filter').addEventListener('click', toggleAdvFilterPanel);
+document.getElementById('btn-reset-adv-filter').addEventListener('click', resetAdvancedFilters);
+document.getElementById('adv-filter-generasi').addEventListener('change', applyAdvancedFilters);
+document.getElementById('adv-filter-agama').addEventListener('change', applyAdvancedFilters);
+document.getElementById('adv-filter-domisili').addEventListener('input', applyAdvancedFilters);
+document.getElementById('adv-filter-usia-min').addEventListener('input', applyAdvancedFilters);
+document.getElementById('adv-filter-usia-max').addEventListener('input', applyAdvancedFilters);
 
 document.getElementById('select-all-checkbox').addEventListener('change', e => {
   toggleSelectAllOnPage(e.target.checked);
@@ -1639,6 +1777,7 @@ async function renderAdminDashboard() {
     { label: 'Data di Sampah', value: trash.length, icon: '🗑️', tone: trash.length > 0 ? 'amber' : 'blue', key: 'dataSampah' }
   ];
   contentEl.innerHTML = DashboardView.buildCardsHTML(cards);
+  renderGenerationBreakdownTable();
 
   if (recentEl) {
     const recent = [...allPeople]
@@ -1653,6 +1792,45 @@ async function renderAdminDashboard() {
         </div>`).join('')
       : '<p class="empty-row-sm">Belum ada data.</p>';
   }
+}
+
+// Tabel "Statistik per Generasi" -- lihat StatsAPI.computeGenerationBreakdown()
+// di js/db.js untuk detail cara hitungnya. Ditaruh sebagai tabel terpisah
+// (bukan kartu klik seperti bagian atas Dashboard) karena isinya per-baris
+// per generasi, bukan 1 angka tunggal.
+function renderGenerationBreakdownTable() {
+  const container = document.getElementById('admin-dashboard-generasi');
+  if (!container) return;
+
+  const breakdown = StatsAPI.computeGenerationBreakdown(allPeople, allMarriages);
+  if (breakdown.length === 0) {
+    container.innerHTML = '<p class="empty-row-sm">Belum ada data.</p>';
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="gen-stats-table-wrap">
+      <table class="gen-stats-table">
+        <thead><tr>
+          <th>Generasi</th><th>Jumlah Orang</th><th>Usia Rata-rata</th><th>Rata-rata Anak / Keluarga</th>
+        </tr></thead>
+        <tbody>
+          ${breakdown.map(row => `
+            <tr>
+              <td>Generasi ke-${row.generasi}</td>
+              <td>${row.jumlahOrang}</td>
+              <td>${row.usiaRataRata !== null
+                ? `${row.usiaRataRata} tahun <span class="gen-stats-empty-cell">(${row.jumlahOrangUsiaDiketahui} data)</span>`
+                : `<span class="gen-stats-empty-cell">Belum ada data</span>`}</td>
+              <td>${row.rataRataAnak !== null
+                ? `${row.rataRataAnak} anak <span class="gen-stats-empty-cell">(${row.totalKeluarga} keluarga)</span>`
+                : `<span class="gen-stats-empty-cell">Belum ada keluarga tercatat</span>`}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 // ---------- Modal Detail Dashboard (daftar nama di balik satu kartu) ----------

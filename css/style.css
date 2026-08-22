@@ -1151,6 +1151,45 @@ h2, h3 { color: var(--text-main); }
 .relasi-summary-belum.active { border-color: #D97706; background: #FEF3E2; color: #9A5B00; }
 .relasi-summary-chip svg { display: block; }
 
+/* ---------- Filter Lanjutan (Tab Data Orang): generasi, agama, domisili, usia ---------- */
+.adv-filter-toggle-btn { position: relative; white-space: nowrap; }
+.adv-filter-count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px;
+  border-radius: 999px; background: var(--danger); color: #fff;
+  font-size: 11px; font-weight: 700; line-height: 18px;
+}
+.adv-filter-panel {
+  background: var(--bg-alt); border: 1px solid var(--border-soft);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+}
+.adv-filter-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.adv-filter-field { display: flex; flex-direction: column; gap: 5px; min-width: 150px; }
+.adv-filter-field label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+.adv-filter-field select, .adv-filter-field input {
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text-main); font-size: 13px;
+}
+.adv-filter-field select:focus, .adv-filter-field input:focus { outline: 2px solid var(--blue-soft); }
+.adv-filter-usia-inputs { display: flex; align-items: center; gap: 6px; }
+.adv-filter-usia-inputs input { width: 72px; }
+.adv-filter-reset-btn { margin-left: auto; white-space: nowrap; }
+.adv-filter-hint { margin: 12px 0 0; }
+@media (max-width: 640px) {
+  .adv-filter-row { flex-direction: column; align-items: stretch; }
+  .adv-filter-field { min-width: 0; }
+  .adv-filter-reset-btn { margin-left: 0; text-align: left; }
+}
+
+/* ---------- Statistik per Generasi (Dashboard) ---------- */
+.gen-stats-table-wrap { overflow-x: auto; }
+.gen-stats-table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border-soft); }
+.gen-stats-table th, .gen-stats-table td { padding: 11px 14px; text-align: left; font-size: 13.5px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+.gen-stats-table th { background: var(--bg-alt); color: var(--text-muted); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.gen-stats-table tbody tr:last-child td { border-bottom: none; }
+.gen-stats-table tbody tr:hover { background: var(--bg-alt); }
+.gen-stats-empty-cell { color: var(--text-muted); font-style: italic; }
+
 /* ---------- Pagination Tab Data Orang ---------- */
 .pagination-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 16px; }
 
