@@ -8,7 +8,12 @@
 // oleh index.html maupun admin.html (toggle mode terang/gelap), tapi
 // sebelumnya tidak ikut dicache app-shell, jadi request-nya bisa gagal saat
 // offline (mis. instalasi baru yang langsung dipakai tanpa sinyal).
-const CACHE_NAME = 'silsilah-cache-v9';
+// v10: tambahkan favicon.ico, apple-touch-icon.png, & 2 ikon maskable baru
+// (icon-maskable-192/512.png) -- ditambahkan saat ikon PWA diganti dari
+// placeholder generik ke desain "pohon silsilah" (lihat manifest.json &
+// index.html/admin.html <link rel="icon">/<link rel="apple-touch-icon">).
+// Tanpa masuk daftar ini, ikon baru gagal tampil saat app dibuka offline.
+const CACHE_NAME = 'silsilah-cache-v10';
 const ASSETS = [
   './',
   './index.html',
@@ -23,8 +28,12 @@ const ASSETS = [
   './js/theme.js',
   './js/searchable-select.js',
   './manifest.json',
+  './favicon.ico',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  './icons/icon-maskable-192.png',
+  './icons/icon-maskable-512.png',
+  './icons/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', event => {

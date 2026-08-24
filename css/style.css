@@ -902,6 +902,34 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .foto-preview-mini { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; margin-bottom: 12px; display: block; }
 
+/* ---------- Tanda tangan pembuat aplikasi ----------
+   Ditempel kecil & tipis di sudut kiri-bawah layar, seperti tanda tangan
+   pelukis di pojok kanvas: cukup terlihat supaya pembuatnya dikenal &
+   dikenang, tapi tidak mencolok/mengganggu tampilan utama. Selalu ada di
+   semua layar (position: fixed), z-index rendah supaya kartu/modal lain
+   tetap di atasnya. */
+.creator-signature {
+  position: fixed;
+  left: 10px;
+  bottom: 6px;
+  z-index: 10;
+  font-size: 10.5px;
+  line-height: 1.35;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  opacity: 0.6;
+  user-select: none;
+  pointer-events: none;
+}
+.creator-signature strong {
+  font-style: normal;
+  font-weight: 600;
+}
+@media (min-width: 640px) {
+  .creator-signature { left: 14px; bottom: 10px; font-size: 11.5px; }
+}
+
 /* ---------- Notifikasi mode "Situs Desktop" aktif di HP ---------- */
 .desktop-mode-notice {
   position: fixed;
@@ -924,12 +952,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   color: #fff; cursor: pointer; padding: 6px 10px;
 }
 
-/* ---------- Indikator status offline ---------- */
-.offline-status-banner {
+/* ---------- Banner atas yang bisa ditumpuk tanpa saling menimpa ----------
+   Dipakai bersama oleh .offline-status-banner & .install-prompt-banner di
+   bawah. Posisi `top` masing-masing diatur lewat JS oleh
+   repositionTopStackBanners() (js/db.js), berurutan mulai dari bawah
+   topbar -- CSS ini cuma menyiapkan posisi/lebar dasarnya sebelum JS
+   sempat jalan. */
+.top-stack-banner {
   position: fixed;
   left: 12px; right: 12px; top: 12px;
   max-width: 480px;
   margin: 0 auto;
+  transition: top 0.2s var(--ease);
+}
+
+/* ---------- Indikator status offline ---------- */
+.offline-status-banner {
   z-index: 400;
   background: #4a3410;
   color: #fff;
@@ -940,6 +978,67 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   text-align: center;
   box-shadow: 0 6px 20px rgba(0,0,0,0.3);
 }
+
+/* ---------- Ajakan pasang aplikasi ke layar utama (Add to Home Screen) ---------- */
+.install-prompt-banner {
+  z-index: 420;
+  background: var(--surface);
+  color: var(--text-main);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-soft);
+  animation: overlayFadeIn 0.25s var(--ease);
+}
+.install-prompt-row { display: flex; align-items: flex-start; gap: 10px; }
+.install-prompt-icon {
+  flex: none;
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+  background: var(--blue-pale);
+  border-radius: 10px;
+}
+.install-prompt-text {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-main);
+}
+.install-prompt-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.install-prompt-btn-install {
+  background: var(--blue-deep);
+  color: #fff;
+  border: none;
+  padding: 8px 20px;
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s var(--ease), transform 0.15s var(--ease-spring);
+}
+.install-prompt-btn-install:hover { background: var(--blue-deeper); }
+.install-prompt-btn-install:active { transform: scale(0.97); }
+.install-prompt-btn-later,
+.install-prompt-btn-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  padding: 4px 2px;
+  font-family: inherit;
+}
+.install-prompt-btn-dismiss { text-decoration: underline; }
+.install-prompt-btn-later:hover,
+.install-prompt-btn-dismiss:hover { color: var(--text-main); }
 
 /* ---------- Setting: Background tampilan publik ---------- */
 .bg-sub-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin: 0 0 6px; }

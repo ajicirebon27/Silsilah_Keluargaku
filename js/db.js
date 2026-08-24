@@ -153,8 +153,32 @@ function initDesktopModeNotice() {
 initDesktopModeNotice();
 
 // =====================================================================
+// PENATA TUMPUKAN BANNER ATAS (top-stack-banner)
+// Beberapa notifikasi kecil bisa muncul di bagian atas layar pada saat yang
+// sama (mis. ajakan pasang ke layar utama + indikator offline). Supaya
+// keduanya tidak bertumpuk/bentrok, semua banner "atas" memakai class
+// .top-stack-banner + atribut data-stack-order (angka kecil = ditampilkan
+// lebih dulu/atas), lalu fungsi ini yang menghitung ulang posisi `top`
+// tiap banner secara berurutan, mulai dari bawah topbar. Dipanggil setiap
+// kali sebuah banner tampil/hilang, dan saat layar di-resize (tinggi
+// topbar bisa berubah kalau judul aplikasi turun ke 2 baris di HP sempit).
+// =====================================================================
+function repositionTopStackBanners() {
+  const topbar = document.querySelector('.topbar');
+  const topbarH = topbar ? topbar.getBoundingClientRect().height : 0;
+  let cursor = topbarH + 10;
+  Array.from(document.querySelectorAll('.top-stack-banner'))
+    .sort((a, b) => (Number(a.dataset.stackOrder) || 0) - (Number(b.dataset.stackOrder) || 0))
+    .forEach(el => {
+      el.style.top = cursor + 'px';
+      cursor += el.getBoundingClientRect().height + 10;
+    });
+}
+window.addEventListener('resize', repositionTopStackBanners);
+
+// =====================================================================
 // INDIKATOR STATUS OFFLINE
-// Muncul sebagai bar kecil di bawah layar setiap kali `navigator.onLine`
+// Muncul sebagai bar kecil di atas layar setiap kali `navigator.onLine`
 // mendeteksi koneksi terputus, dan hilang lagi begitu koneksi kembali.
 // Ini murni indikator UX -- pemuatan data itu sendiri sudah otomatis
 // jatuh ke cache Firestore (lihat `firebaseConfig.js` -> enablePersistence())
@@ -169,16 +193,22 @@ function initOfflineStatusBanner() {
   function show() {
     if (bar) return;
     bar = document.createElement('div');
-    bar.className = 'offline-status-banner';
+    // data-stack-order lebih besar dari banner ajakan pasang (10) supaya
+    // kalau keduanya tampil bersamaan, banner offline ini otomatis
+    // ditempatkan DI BAWAH banner ajakan pasang, tidak menimpanya.
+    bar.className = 'offline-status-banner top-stack-banner';
+    bar.dataset.stackOrder = '20';
     bar.innerHTML = firestoreOfflineReady
       ? `📡 Sedang offline -- menampilkan data tersimpan terakhir di perangkat ini. Data terbaru akan otomatis dimuat begitu koneksi kembali.`
       : `📡 Sedang offline -- data mungkin tidak bisa dimuat di perangkat/browser ini (cache offline tidak aktif).`;
     document.body.appendChild(bar);
+    repositionTopStackBanners();
   }
   function hide() {
     if (!bar) return;
     bar.remove();
     bar = null;
+    repositionTopStackBanners();
   }
 
   window.addEventListener('online', hide);
@@ -189,6 +219,109 @@ function initOfflineStatusBanner() {
   });
 }
 initOfflineStatusBanner();
+
+// =====================================================================
+// AJAKAN PASANG APLIKASI KE LAYAR UTAMA (Add to Home Screen / PWA install)
+// Begitu browser memberi tahu aplikasi ini "bisa dipasang" (event
+// `beforeinstallprompt`, hanya muncul di browser berbasis Chromium spt
+// Chrome/Edge Android -- Safari/iOS tidak mendukung event ini), tampilkan
+// banner kecil di ATAS layar (lihat repositionTopStackBanners() di atas
+// supaya tidak bentrok dgn banner offline) yang mengajak pengguna
+// memasangnya, supaya lain kali gampang dibuka lagi dari layar utama HP
+// tanpa perlu buka browser dulu.
+//
+// Pilihan pengguna disimpan di localStorage:
+// - "Pasang"              -> munculkan prompt instalasi asli dari browser.
+// - "Nanti"                -> jangan tampilkan lagi selama 3 hari.
+// - "Jangan tampilkan lagi" -> jangan tampilkan lagi selamanya di perangkat ini.
+// Banner juga tidak pernah tampil kalau aplikasi memang sudah dibuka dalam
+// mode terpasang (standalone), atau sudah pernah berhasil dipasang
+// (event `appinstalled`).
+// =====================================================================
+(function initInstallPromptBanner() {
+  const DISMISS_KEY = 'silsilahInstallPromptDismissed';
+  const SNOOZE_KEY = 'silsilahInstallPromptSnoozeUntil';
+
+  let deferredPrompt = null;
+  let bar = null;
+
+  function isStandaloneAlready() {
+    try {
+      return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+        window.navigator.standalone === true;
+    } catch (e) { return false; }
+  }
+
+  function isSuppressed() {
+    try {
+      if (localStorage.getItem(DISMISS_KEY) === '1') return true;
+      const until = Number(localStorage.getItem(SNOOZE_KEY) || 0);
+      if (Date.now() < until) return true;
+    } catch (e) { /* localStorage diblokir -- tetap tampilkan */ }
+    return false;
+  }
+
+  function hide() {
+    if (!bar) return;
+    bar.remove();
+    bar = null;
+    repositionTopStackBanners();
+  }
+
+  function show() {
+    if (bar || isStandaloneAlready() || isSuppressed()) return;
+
+    bar = document.createElement('div');
+    // data-stack-order paling kecil -- banner ini yang paling atas kalau
+    // ada beberapa banner tampil bersamaan (lihat repositionTopStackBanners()).
+    bar.className = 'install-prompt-banner top-stack-banner';
+    bar.dataset.stackOrder = '10';
+    bar.innerHTML = `
+      <div class="install-prompt-row">
+        <span class="install-prompt-icon" aria-hidden="true">🏠</span>
+        <p class="install-prompt-text">Supaya gampang dibuka lagi &amp; tidak lupa, pasang aplikasi ini ke layar utama HP kamu.</p>
+      </div>
+      <div class="install-prompt-actions">
+        <button type="button" class="install-prompt-btn-install">Pasang</button>
+        <button type="button" class="install-prompt-btn-later">Nanti</button>
+        <button type="button" class="install-prompt-btn-dismiss">Jangan tampilkan lagi</button>
+      </div>
+    `;
+    document.body.appendChild(bar);
+    repositionTopStackBanners();
+
+    bar.querySelector('.install-prompt-btn-install').addEventListener('click', async () => {
+      const promptEvent = deferredPrompt;
+      hide();
+      if (!promptEvent) return;
+      try {
+        promptEvent.prompt();
+        await promptEvent.userChoice;
+      } catch (e) { /* abaikan -- prompt bisa gagal kalau dipanggil 2x dsb. */ }
+      deferredPrompt = null;
+    });
+    bar.querySelector('.install-prompt-btn-later').addEventListener('click', () => {
+      try { localStorage.setItem(SNOOZE_KEY, String(Date.now() + 3 * 24 * 60 * 60 * 1000)); } catch (e) {}
+      hide();
+    });
+    bar.querySelector('.install-prompt-btn-dismiss').addEventListener('click', () => {
+      try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) {}
+      hide();
+    });
+  }
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); // cegah mini-infobar bawaan browser, pakai banner kita sendiri
+    deferredPrompt = e;
+    show();
+  });
+
+  window.addEventListener('appinstalled', () => {
+    try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) {}
+    hide();
+    deferredPrompt = null;
+  });
+})();
 
 // Pulihkan field bertipe Timestamp Firestore yang "rusak" jadi objek biasa
 // {seconds, nanoseconds} setelah lewat JSON.stringify/parse (dipakai saat restore backup).
