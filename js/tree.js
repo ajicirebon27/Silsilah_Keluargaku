@@ -8,7 +8,10 @@
 // =====================================================================
 
 const NODE_W = 140;
-const NODE_H = 64;
+let NODE_H = 64; // nilai dasar (dgn 1 baris nama) -- disesuaikan OTOMATIS tiap
+                  // render (lihat computeNodeH) mengikuti nama TERPANJANG yg
+                  // sedang tampil, supaya kotak selalu cukup tinggi menampung
+                  // nama yg terpaksa dibungkus (wrap) jadi >1 baris.
 const V_GAP = 120;     // jarak dasar antar generasi (bisa melebar otomatis, lihat GAP_SAFETY di bawah)
 const H_GAP = 30;      // jarak antar unit dlm 1 GENERASI YG SAMA -- dipakai kalau 2 unit
                         // yg bersebelahan berasal dari ORANG TUA yg SAMA (mis. 2 kelompok
@@ -863,6 +866,117 @@ function truncate(str, n) {
   return str.length > n ? str.slice(0, n - 1) + '…' : str;
 }
 
+// =====================================================================
+// WRAP TEKS NAMA supaya SELALU MUAT di dalam kotak node (bukan dipotong
+// jadi "..." spt fungsi truncate() lama). Lebar teks diukur pakai
+// <canvas> supaya akurat sesuai font asli yg dipakai kotak (bukan cuma
+// tebak jumlah karakter) -- lalu kotak (NODE_H) dibuat MENGIKUTI jumlah
+// baris nama TERPANJANG yg sedang tampil, dihitung ulang tiap render
+// lewat computeNodeH() di bawah.
+// =====================================================================
+const NODE_TEXT_PADDING = 12; // margin kiri+kanan di dlm kotak yg disisakan utk teks nama
+const NODE_NAME_MAX_LINES = 3; // maksimal baris nama sblm terpaksa dipotong "…"
+const NODE_LINE_HEIGHT = 16;   // jarak antar baris nama (px)
+
+let _measureCtx = null;
+function getMeasureCtx() {
+  if (!_measureCtx) _measureCtx = document.createElement('canvas').getContext('2d');
+  // Font ini HARUS disamakan dgn .node-name di css/style.css (font-weight
+  // 700, 13px) supaya lebar yg diukur di sini benar2 cocok dgn yg tampil.
+  _measureCtx.font = '700 13px "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  return _measureCtx;
+}
+
+// Kata yg SENDIRIAN sudah lebih lebar dari kotak (mis. nama tanpa spasi
+// yg panjang) dipecah per-huruf, supaya tetap muat & tidak menembus tepi.
+function breakLongWord(ctx, word, maxWidth) {
+  const chunks = [];
+  let current = '';
+  for (const ch of word) {
+    const test = current + ch;
+    if (current && ctx.measureText(test).width > maxWidth) {
+      chunks.push(current);
+      current = ch;
+    } else {
+      current = test;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function wrapNodeName(nama, maxWidth = NODE_W - NODE_TEXT_PADDING * 2, maxLines = NODE_NAME_MAX_LINES) {
+  const ctx = getMeasureCtx();
+  const str = (nama || '').trim();
+  if (!str) return [''];
+
+  const words = str.split(/\s+/);
+  const lines = [];
+  let current = '';
+  let truncated = false; // jadi true kalau ada teks yg terpaksa tidak ikut ditampilkan
+  const pushCurrent = () => { if (current) { lines.push(current); current = ''; } };
+  const isFull = () => lines.length >= maxLines;
+
+  outer:
+  for (const word of words) {
+    if (isFull()) { truncated = true; break; }
+    const candidate = current ? `${current} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    pushCurrent();
+    if (isFull()) { truncated = true; break; }
+    if (ctx.measureText(word).width <= maxWidth) {
+      current = word;
+      continue;
+    }
+    // Kata ini sendirian sudah lebih lebar dari kotak -> pecah per huruf,
+    // TAPI tetap hormati batas maxLines (jangan sampai baris yg dihasilkan
+    // dari 1 kata ini melebihi sisa slot baris yg ada).
+    const chunks = breakLongWord(ctx, word, maxWidth);
+    for (let i = 0; i < chunks.length; i++) {
+      if (isFull()) { truncated = true; break outer; }
+      const isLastChunkOfWord = i === chunks.length - 1;
+      if (isLastChunkOfWord) {
+        current = chunks[i];
+      } else {
+        lines.push(chunks[i]);
+      }
+    }
+  }
+  pushCurrent();
+  if (lines.length === 0) lines.push('');
+
+  // Kalau ada teks yg terpaksa tidak ikut ditampilkan (nama tetap lebih
+  // panjang dari muat di maxLines baris), tandai "…" di baris terakhir
+  // spy jelas nama sebenarnya lebih panjang (kasus jarang -- perlu nama
+  // super panjang di kotak yg sempit).
+  if (truncated) {
+    let last = lines[lines.length - 1] || '';
+    while (last.length > 0 && ctx.measureText(last + '…').width > maxWidth) {
+      last = last.slice(0, -1);
+    }
+    lines[lines.length - 1] = last + '…';
+  }
+
+  return lines.slice(0, maxLines);
+}
+
+// Menghitung tinggi kotak (+ posisi Y baris nama & sub-info) yg dibutuhkan
+// supaya `maxNameLines` baris nama selalu muat rapi di atas 1 baris
+// sub-info (jenis kelamin/status wafat) di bawahnya. Rumus dibuat supaya
+// utk maxNameLines=1 hasilnya PERSIS SAMA dgn kotak versi lama (tinggi
+// 64px, nama di y=26, sub di y=44) -- jadi pohon yg semua namanya pendek
+// tampilannya tidak berubah sama sekali, cuma yg namanya panjang saja yg
+// kotaknya melebar mengikuti teks.
+function computeNodeH(maxNameLines) {
+  const nameBlockTopY = 26 - (maxNameLines - 1) * (NODE_LINE_HEIGHT / 2);
+  const lastNameLineY = nameBlockTopY + (maxNameLines - 1) * NODE_LINE_HEIGHT;
+  const subY = lastNameLineY + 18;
+  return { height: subY + 20, nameBlockTopY, subY };
+}
+
 // rootIds (opsional): array id "pasangan utama" (mis. [idDarsa, idKesi]) --
 // dipakai sbg TITIK AWAL BFS keterjangkauan di computeTreeVisibility(): yang
 // tampil pertama kali dibuka HANYA rootIds itu sendiri, semua yang lain
@@ -886,6 +1000,20 @@ function renderTreeSVG(container, people, marriages, onNodeClick, rootIds) {
   const visibleMarriages = marriages
     .filter(m => !(m.orangId1 && hidden.has(m.orangId1)) && !(m.orangId2 && hidden.has(m.orangId2)))
     .map(m => ({ ...m, childIds: (m.childIds || []).filter(cid => visibleIdSet.has(cid)) }));
+
+  // Bungkus (wrap) nama tiap orang yg sedang tampil TERLEBIH DAHULU, lalu
+  // sesuaikan NODE_H mengikuti nama TERPANJANG di antara mereka -- harus
+  // dilakukan SEBELUM layoutTree() dipanggil, krn layoutTree memakai
+  // NODE_H utk menghitung jarak antar generasi (cumulativeY).
+  const nameLinesById = new Map();
+  let maxNameLines = 1;
+  visiblePeople.forEach(p => {
+    const lines = wrapNodeName(p.nama);
+    nameLinesById.set(p.id, lines);
+    maxNameLines = Math.max(maxNameLines, lines.length);
+  });
+  const { height: nodeH, nameBlockTopY, subY } = computeNodeH(maxNameLines);
+  NODE_H = nodeH;
 
   const { positions, marriageColor, marriageLabel, marriageHubId, marriageDepth, marriageCombOffset } = layoutTree(visiblePeople, visibleMarriages);
 
@@ -1044,12 +1172,23 @@ function renderTreeSVG(container, people, marriages, onNodeClick, rootIds) {
     // sama sekali dan tidak bisa dijangkau keyboard.
     const nodeAriaLabel = `${escapeHtml(p.nama)}, ${escapeHtml(p.jenisKelamin || 'jenis kelamin tidak diketahui')}${wafat ? ', sudah wafat' : ''}`;
 
+    // Nama dipecah jadi beberapa <tspan> (bkn dipotong "...") supaya teks
+    // lengkap tetap terbaca walau kotak lebarnya tetap (NODE_W). Tiap
+    // baris "digantung" mulai dari nameBlockTopY yg sama utk SEMUA kotak
+    // (dihitung dari nama terpanjang di seluruh pohon), supaya baris
+    // sub-info (jenis kelamin/status) tetap sejajar rapi antar kotak
+    // walau jumlah baris nama tiap orang berbeda-beda.
+    const nameLines = nameLinesById.get(p.id) || [''];
+    const nameTspans = nameLines
+      .map((line, i) => `<tspan x="${NODE_W / 2}" dy="${i === 0 ? 0 : NODE_LINE_HEIGHT}">${escapeHtml(line)}</tspan>`)
+      .join('');
+
     svg += `
       <g class="tree-node ${cls}" data-id="${p.id}" transform="translate(${pos.x},${pos.y})" role="button" tabindex="0" aria-label="${nodeAriaLabel}">
         <title>${nodeAriaLabel}</title>
         <rect width="${NODE_W}" height="${NODE_H}" rx="10" class="node-rect" style="cursor:pointer"/>
-        <text x="${NODE_W / 2}" y="26" text-anchor="middle" class="node-name" style="cursor:pointer">${escapeHtml(truncate(p.nama, 16))}</text>
-        <text x="${NODE_W / 2}" y="44" text-anchor="middle" class="node-sub" style="cursor:pointer">${escapeHtml(p.jenisKelamin || '')}${wafat}</text>
+        <text x="${NODE_W / 2}" y="${nameBlockTopY}" text-anchor="middle" class="node-name" style="cursor:pointer">${nameTspans}</text>
+        <text x="${NODE_W / 2}" y="${subY}" text-anchor="middle" class="node-sub" style="cursor:pointer">${escapeHtml(p.jenisKelamin || '')}${wafat}</text>
         ${toggleSvg}
       </g>`;
   });
