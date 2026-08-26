@@ -5,7 +5,10 @@
 //                   agama, pekerjaan, alamat, kontak, fotoUrl, catatan, createdAt }
 //   marriages   : { orangId1, orangId2 (bisa null = orang tua tunggal belum diketahui),
 //                   urutanPasangan, childIds: [], createdAt }
-//   comments    : { orangId, namaPengirim, isiKomentar, sudahDibaca, waktuKirim }
+//   comments    : { orangId (bisa null = komentar umum lewat menu "Komen" di
+//                   topbar, tidak terikat ke 1 orang tertentu), namaPengirim,
+//                   kontak (nomor kontak pengirim; kosong utk komentar lama
+//                   sebelum field ini ada), isiKomentar, sudahDibaca, waktuKirim }
 //   settings/app: { judulAplikasi, rootPersonId,
 //                    backgroundType: 'default' | 'image' | 'color',
 //                    backgroundImage (base64, hanya jika backgroundType='image'),
@@ -518,13 +521,19 @@ const CommentAPI = {
   // pengetikan berlebih secara wajar) DAN di sini (mencegah orang yang sengaja
   // memanggil fungsi ini lewat console browser untuk mengirim teks raksasa).
   MAX_NAMA: 80,
+  MAX_KONTAK: 40,
   MAX_KOMENTAR: 1000,
-  async add(orangId, namaPengirim, isiKomentar) {
+  // orangId: id orang yang dikomentari, atau null/undefined untuk komentar
+  // umum (menu "Komen" di topbar, tidak terikat ke 1 orang tertentu).
+  // kontak: nomor kontak pengirim -- wajib diisi di form "Komen" umum,
+  // opsional (boleh kosong) di form komentar per-orang lama.
+  async add(orangId, namaPengirim, isiKomentar, kontak) {
     const namaAman = (namaPengirim || '').trim().slice(0, this.MAX_NAMA);
     const isiAman = (isiKomentar || '').trim().slice(0, this.MAX_KOMENTAR);
+    const kontakAman = (kontak || '').trim().slice(0, this.MAX_KONTAK);
     if (!namaAman || !isiAman) throw new Error('Nama dan komentar tidak boleh kosong.');
     await db.collection('comments').add({
-      orangId, namaPengirim: namaAman, isiKomentar: isiAman,
+      orangId: orangId || null, namaPengirim: namaAman, kontak: kontakAman, isiKomentar: isiAman,
       sudahDibaca: false,
       waktuKirim: firebase.firestore.FieldValue.serverTimestamp()
     });

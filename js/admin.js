@@ -1527,14 +1527,24 @@ async function renderComments() {
   }
 
   container.innerHTML = comments.map(c => {
-    const person = allPeople.find(p => p.id === c.orangId);
+    // orangId kosong (null/undefined) = komentar umum lewat menu "Komen" di
+    // topbar (tidak terikat ke 1 orang tertentu) -- lihat CommentAPI.add di
+    // js/db.js. Selain itu, komentar lama terikat ke 1 orang seperti biasa.
+    let targetLabel;
+    if (c.orangId) {
+      const person = allPeople.find(p => p.id === c.orangId);
+      targetLabel = `tentang ${escapeHtml(person ? person.nama : 'data tidak ditemukan')}`;
+    } else {
+      targetLabel = '💬 Saran/Kritik Umum untuk Admin';
+    }
     const waktu = c.waktuKirim && c.waktuKirim.toDate ? c.waktuKirim.toDate().toLocaleString('id-ID') : '';
     return `
       <div class="comment-card ${c.sudahDibaca ? '' : 'unread'}">
         <div class="comment-card-header">
           <strong>${escapeHtml(c.namaPengirim)}</strong>
-          <span class="comment-card-target">tentang ${escapeHtml(person ? person.nama : 'data tidak ditemukan')}</span>
+          <span class="comment-card-target">${targetLabel}</span>
         </div>
+        ${c.kontak ? `<p class="comment-card-kontak">📞 ${escapeHtml(c.kontak)}</p>` : ''}
         <p class="comment-card-text">${escapeHtml(c.isiKomentar)}</p>
         <div class="comment-card-footer">
           <span class="comment-card-time">${waktu}</span>
@@ -1872,7 +1882,7 @@ async function openDashboardDetail(key) {
       .filter(c => !c.sudahDibaca)
       .map(c => ({
         nama: c.namaPengirim || '(tanpa nama)',
-        ket: `untuk ${peopleMap.get(c.orangId)?.nama || 'orang tidak diketahui'}`
+        ket: c.orangId ? `untuk ${peopleMap.get(c.orangId)?.nama || 'orang tidak diketahui'}` : 'Saran/Kritik Umum untuk Admin'
       }));
   } else if (key === 'dataSampah') {
     const trash = await PeopleAPI.getTrash().catch(() => []);

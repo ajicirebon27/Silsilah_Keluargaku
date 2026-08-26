@@ -33,6 +33,8 @@ async function init() {
   try {
     appSettings = await SettingsAPI.getAppSettings();
     document.getElementById('app-title').textContent = appSettings.judulAplikasi || 'Silsilah Keluarga';
+    const landingTitle = document.getElementById('landing-menu-title');
+    if (landingTitle) landingTitle.textContent = appSettings.judulAplikasi || 'Silsilah Keluarga';
     document.title = appSettings.judulAplikasi || 'Silsilah Keluarga';
     applyPublicBackground(appSettings);
   } catch (e) { appSettings = {}; /* pakai judul default jika gagal */ }
@@ -44,7 +46,9 @@ async function init() {
   setupLaporanModal();
   setupDashboardModal();
   setupJelajahModal();
+  setupKomentarUmumModal();
   setupSubKeluargaReset();
+  setupLandingMenu();
   setupViewChooser();
   setupBirthdayModal();
 
@@ -358,12 +362,11 @@ let jelajahOpenedFromChooser = false;
 function setupViewChooser() {
   const chooser = document.getElementById('view-chooser');
   const treeSection = document.getElementById('tree-view-section');
-  const landingHint = document.getElementById('landing-hint');
+  const landingMenu = document.getElementById('landing-menu');
   if (!chooser || !treeSection) return;
 
   document.getElementById('choose-tree').addEventListener('click', () => {
     chooser.style.display = 'none';
-    if (landingHint) landingHint.style.display = 'none';
     treeSection.style.display = '';
     subFamilyPersonId = null;
     document.getElementById('subkeluarga-active-label').style.display = 'none';
@@ -383,30 +386,18 @@ function setupViewChooser() {
 
   document.getElementById('choose-jelajah').addEventListener('click', () => {
     chooser.style.display = 'none';
-    if (landingHint) landingHint.style.display = 'none';
     jelajahOpenedFromChooser = true;
     openJelajahModal();
   });
 
   // Tombol close bundar kecil di pojok kartu pilihan: tamu yang tidak mau
-  // langsung pilih Pohon/Jelajah bisa menutup layar ini saja, supaya topbar
-  // (Cari Data, Dashboard, Admin) -- yang tadinya tertutup penuh oleh overlay
-  // pilihan ini -- jadi bisa dipakai langsung.
+  // langsung pilih Pohon/Jelajah kembali ke menu utama (#landing-menu),
+  // bukan dibiarkan di layar kosong.
   const chooserClose = document.getElementById('chooser-close');
   if (chooserClose) {
     chooserClose.addEventListener('click', () => {
       chooser.style.display = 'none';
-      if (landingHint) landingHint.style.display = 'flex';
-    });
-  }
-
-  // Dari layar landing-hint, tamu masih bisa kembali membuka layar pilihan
-  // Pohon/Jelajah kalau berubah pikiran.
-  const landingShowChooser = document.getElementById('landing-show-chooser');
-  if (landingShowChooser) {
-    landingShowChooser.addEventListener('click', () => {
-      if (landingHint) landingHint.style.display = 'none';
-      chooser.style.display = 'flex';
+      if (landingMenu) landingMenu.style.display = 'flex';
     });
   }
 
@@ -415,7 +406,6 @@ function setupViewChooser() {
     btnSwitch.addEventListener('click', () => {
       document.getElementById('jelajah-modal').style.display = 'none';
       jelajahOpenedFromChooser = false;
-      if (landingHint) landingHint.style.display = 'none';
       treeSection.style.display = 'none';
       subFamilyPersonId = null;
       document.getElementById('subkeluarga-active-label').style.display = 'none';
@@ -423,6 +413,52 @@ function setupViewChooser() {
       const modeSelectSwitch = document.getElementById('tree-search-mode');
       if (modeSelectSwitch) modeSelectSwitch.value = 'all';
       chooser.style.display = 'flex';
+    });
+  }
+}
+
+// =====================================================================
+// MENU UTAMA PUBLIK (#landing-menu) -- layar pertama yang tampil saat
+// halaman dibuka (lihat index.html). Berisi semua menu level publik:
+// Tampilkan Silsilah, Dashboard, Komen, Cari Data, Admin, Notifikasi,
+// Ganti Tema. Item Admin pakai tag <a> biasa (langsung ke admin.html,
+// tidak perlu JS). Item lain memanggil fungsi buka-modal yang SAMA dengan
+// yang dipakai tombol topbar (openDashboardModal, openKomentarUmumModal,
+// dst) supaya perilakunya identik & tidak ada logika terduplikasi.
+// =====================================================================
+function setupLandingMenu() {
+  const landingMenu = document.getElementById('landing-menu');
+  const chooser = document.getElementById('view-chooser');
+  if (!landingMenu) return;
+
+  const btnTampilkan = document.getElementById('menu-tampilkan-silsilah');
+  if (btnTampilkan && chooser) {
+    btnTampilkan.addEventListener('click', () => {
+      landingMenu.style.display = 'none';
+      chooser.style.display = 'flex';
+    });
+  }
+
+  const btnMenuDashboard = document.getElementById('menu-dashboard');
+  if (btnMenuDashboard) btnMenuDashboard.addEventListener('click', openDashboardModal);
+
+  const btnMenuKomentar = document.getElementById('menu-komentar');
+  if (btnMenuKomentar) btnMenuKomentar.addEventListener('click', openKomentarUmumModal);
+
+  const btnMenuCariData = document.getElementById('menu-cari-data');
+  if (btnMenuCariData) btnMenuCariData.addEventListener('click', openLaporanModal);
+
+  const btnMenuNotifikasi = document.getElementById('menu-notifikasi');
+  if (btnMenuNotifikasi) btnMenuNotifikasi.addEventListener('click', openBirthdayModal);
+
+  // "Ganti Tema" tinggal memicu klik tombol toggle tema yang sudah ada di
+  // topbar -- supaya logika ganti tema (js/theme.js) tidak perlu diduplikasi
+  // atau disentuh sama sekali.
+  const btnMenuTema = document.getElementById('menu-ganti-tema');
+  if (btnMenuTema) {
+    btnMenuTema.addEventListener('click', () => {
+      const themeBtn = document.getElementById('btn-theme-toggle');
+      if (themeBtn) themeBtn.click();
     });
   }
 }
@@ -528,15 +564,24 @@ function refreshBirthdayNotif() {
   birthdayTodayList = BirthdayUtil.getUlangTahunHariIni(allPeople);
   const btn = document.getElementById('btn-notif-ultah');
   const badge = document.getElementById('notif-ultah-badge');
+  // Badge kedua di #landing-menu (menu utama publik) -- disamakan isinya
+  // dengan badge lonceng di topbar supaya info berulang tahun tetap
+  // terlihat walau tamu belum pernah membuka tampilan Pohon/Jelajah.
+  const landingBadge = document.getElementById('landing-notif-badge');
   if (birthdayTodayList.length > 0) {
     badge.textContent = birthdayTodayList.length;
     badge.style.display = 'inline-block';
     btn.classList.add('has-birthday');
     btn.title = `${birthdayTodayList.length} orang berulang tahun hari ini`;
+    if (landingBadge) {
+      landingBadge.textContent = birthdayTodayList.length;
+      landingBadge.style.display = 'inline-block';
+    }
   } else {
     badge.style.display = 'none';
     btn.classList.remove('has-birthday');
     btn.title = 'Notifikasi Ulang Tahun';
+    if (landingBadge) landingBadge.style.display = 'none';
   }
 }
 
@@ -1290,6 +1335,146 @@ async function submitComment(e) {
     document.getElementById('comment-form').reset();
     document.getElementById('comment-counter').textContent = '0/1000';
     initCommentCaptcha();
+  } catch (err) {
+    feedback.textContent = 'Gagal mengirim komentar. Coba lagi.';
+    feedback.className = 'comment-feedback error';
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+// =====================================================================
+// KOMENTAR UMUM (menu "Komen" di topbar) -- BEDA dengan form komentar di
+// Modal Detail Orang di atas: form itu terikat ke 1 orang (currentPersonId),
+// form ini untuk saran/kritik/usulan umum ke Administrator, tidak terikat ke
+// orang manapun (orangId dikirim null -- lihat CommentAPI.add di js/db.js).
+// Pakai lapis anti-spam yang sama (honeypot, captcha hitung, jeda minimum,
+// jeda kirim ulang) seperti form komentar per-orang, tapi dengan variabel &
+// localStorage key TERPISAH supaya kedua form tidak saling mengganggu kalau
+// entah bagaimana sempat dibuka berdekatan.
+// =====================================================================
+const KOMENTAR_UMUM_COOLDOWN_MS = 15000; // jeda minimal antar kirim, sama seperti form per-orang
+const KOMENTAR_UMUM_MIN_FILL_MS = 2000; // form tidak boleh dikirim dlm 2 detik pertama sejak dibuka
+let komentarUmumCaptchaAnswer = null;
+let komentarUmumFormOpenedAt = 0;
+
+function setupKomentarUmumModal() {
+  const openBtn = document.getElementById('btn-komentar-umum');
+  const modal = document.getElementById('komentar-umum-modal');
+  const closeBtn = document.getElementById('komentar-umum-modal-close');
+  const form = document.getElementById('komentar-umum-form');
+  if (!openBtn || !modal || !form) return;
+
+  openBtn.addEventListener('click', openKomentarUmumModal);
+  closeBtn.addEventListener('click', closeKomentarUmumModal);
+  modal.addEventListener('click', e => {
+    if (e.target.id === 'komentar-umum-modal') closeKomentarUmumModal();
+  });
+  form.addEventListener('submit', submitKomentarUmum);
+
+  const textArea = document.getElementById('komentar-umum-pesan');
+  const counter = document.getElementById('komentar-umum-counter');
+  if (textArea && counter) {
+    textArea.addEventListener('input', () => {
+      counter.textContent = `${textArea.value.length}/${textArea.maxLength}`;
+    });
+  }
+}
+
+function openKomentarUmumModal() {
+  document.getElementById('komentar-umum-form').reset();
+  document.getElementById('komentar-umum-counter').textContent = '0/1000';
+  document.getElementById('komentar-umum-feedback').textContent = '';
+  document.getElementById('komentar-umum-feedback').className = 'comment-feedback';
+  initKomentarUmumCaptcha();
+  document.getElementById('komentar-umum-modal').style.display = 'flex';
+}
+
+function closeKomentarUmumModal() {
+  document.getElementById('komentar-umum-modal').style.display = 'none';
+}
+
+function initKomentarUmumCaptcha() {
+  const a = 1 + Math.floor(Math.random() * 9);
+  const b = 1 + Math.floor(Math.random() * 9);
+  komentarUmumCaptchaAnswer = a + b;
+  komentarUmumFormOpenedAt = Date.now();
+  const label = document.getElementById('komentar-umum-captcha-question');
+  const input = document.getElementById('komentar-umum-captcha-answer');
+  if (label) label.textContent = `Berapa ${a} + ${b}?`;
+  if (input) input.value = '';
+  const hp = document.getElementById('komentar-umum-website');
+  if (hp) hp.value = '';
+}
+
+async function submitKomentarUmum(e) {
+  e.preventDefault();
+  const nama = document.getElementById('komentar-umum-nama').value.trim();
+  const kontak = document.getElementById('komentar-umum-kontak').value.trim();
+  const pesan = document.getElementById('komentar-umum-pesan').value.trim();
+  const feedback = document.getElementById('komentar-umum-feedback');
+  const submitBtn = document.querySelector('#komentar-umum-form button[type="submit"]');
+
+  // Wajib diisi semua (Nama, Nomor Kontak, Pesan) -- kalau salah satu kosong,
+  // pesan TIDAK dikirim & tampilkan pesan gagal yang jelas. `required` di
+  // HTML sudah menahan sebagian besar kasus, tapi divalidasi ulang di sini
+  // supaya pesan gagalnya konsisten & tetap tertahan walau atribut required
+  // dilewati (mis. lewat DevTools).
+  if (!nama || !kontak || !pesan) {
+    feedback.textContent = 'Semua data wajib diisi (Nama, Nomor Kontak, dan Pesan). Komentar belum terkirim.';
+    feedback.className = 'comment-feedback error';
+    return;
+  }
+
+  // 1) Honeypot: field ini seharusnya SELALU kosong untuk pengguna asli.
+  // Kalau terisi, ini bot -- ditolak diam-diam dengan pesan sukses palsu,
+  // supaya bot tidak "belajar" mendeteksi penolakan.
+  const honeypot = document.getElementById('komentar-umum-website').value;
+  if (honeypot) {
+    feedback.textContent = 'Terima kasih, komentar kamu sudah terkirim ke admin.';
+    feedback.className = 'comment-feedback success';
+    document.getElementById('komentar-umum-form').reset();
+    document.getElementById('komentar-umum-counter').textContent = '0/1000';
+    initKomentarUmumCaptcha();
+    return;
+  }
+
+  // 2) Jeda minimum sejak form dibuka.
+  if (Date.now() - komentarUmumFormOpenedAt < KOMENTAR_UMUM_MIN_FILL_MS) {
+    feedback.textContent = 'Mohon isi form dengan wajar sebelum mengirim.';
+    feedback.className = 'comment-feedback error';
+    return;
+  }
+
+  // 3) Captcha hitung sederhana.
+  const captchaInput = document.getElementById('komentar-umum-captcha-answer');
+  const captchaVal = Number(captchaInput.value);
+  if (!captchaInput.value || captchaVal !== komentarUmumCaptchaAnswer) {
+    feedback.textContent = 'Jawaban captcha salah, coba lagi.';
+    feedback.className = 'comment-feedback error';
+    initKomentarUmumCaptcha();
+    return;
+  }
+
+  // 4) Jeda minimum antar kirim (localStorage key terpisah dari form per-orang).
+  const lastSent = Number(localStorage.getItem('lastKomentarUmumAt') || 0);
+  const elapsed = Date.now() - lastSent;
+  if (elapsed < KOMENTAR_UMUM_COOLDOWN_MS) {
+    const sisaDetik = Math.ceil((KOMENTAR_UMUM_COOLDOWN_MS - elapsed) / 1000);
+    feedback.textContent = `Mohon tunggu ${sisaDetik} detik lagi sebelum mengirim komentar berikutnya.`;
+    feedback.className = 'comment-feedback error';
+    return;
+  }
+
+  submitBtn.disabled = true;
+  try {
+    await CommentAPI.add(null, nama, pesan, kontak);
+    localStorage.setItem('lastKomentarUmumAt', String(Date.now()));
+    feedback.textContent = 'Terima kasih, komentar kamu sudah terkirim ke admin.';
+    feedback.className = 'comment-feedback success';
+    document.getElementById('komentar-umum-form').reset();
+    document.getElementById('komentar-umum-counter').textContent = '0/1000';
+    initKomentarUmumCaptcha();
   } catch (err) {
     feedback.textContent = 'Gagal mengirim komentar. Coba lagi.';
     feedback.className = 'comment-feedback error';

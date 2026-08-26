@@ -1,5 +1,53 @@
 # Silsilah Keluarga — Panduan Setup
 
+> **Baru di versi ini (v23) -- Menu Utama Publik terpusat (landing-menu):**
+> Sebelumnya begitu halaman dibuka, tamu langsung disodori layar pilihan
+> **Pohon/Kartu** ("Pilih Tampilan Silsilah Keluarga"), dan menu lain
+> (Dashboard, Cari Data, Admin, dst) cuma ada di topbar kecil di atas.
+> Sekarang:
+> - Layar **pertama** yang tampil adalah **Menu Utama** baru di tengah
+>   layar, berisi SEMUA menu level publik sebagai kotak-kotak rapi:
+>   **Tampilkan Silsilah, Dashboard, Komen, Cari Data, Admin, Notifikasi,
+>   Ganti Tema** (urutan ini tetap). Layar pilihan Pohon/Kartu (v22 ke
+>   bawah) baru muncul setelah kotak **"Tampilkan Silsilah"** diklik.
+> - Tombol topbar **"Ganti Tampilan"** diganti namanya jadi **"Tampilkan
+>   Silsilah"** (perilakunya sama -- membuka lagi layar pilihan Pohon/Kartu),
+>   supaya labelnya konsisten dengan kotak menu utama di atas.
+> - Menutup layar pilihan Pohon/Kartu (tombol &times; bundar) sekarang
+>   kembali ke Menu Utama, menggantikan layar "landing-hint" versi lama yang
+>   sudah dihapus.
+> - Kotak Dashboard/Komen/Cari Data/Notifikasi di Menu Utama memanggil modal
+>   yang PERSIS sama dengan tombol topbar yang sudah ada (tidak ada logika
+>   baru/terduplikasi) -- termasuk badge jumlah ulang tahun hari ini yang
+>   ikut tampil di kotak Notifikasi.
+
+> **Baru di versi ini (v22) -- Menu "Komen" umum di tampilan publik:**
+> Sebelumnya form komentar publik hanya bisa diakses lewat kartu detail 1
+> orang (jadi selalu terikat/"tentang" orang itu) -- tidak ada cara bagi
+> tamu untuk mengirim saran/kritik/usulan umum ke Administrator yang tidak
+> berkaitan dengan 1 orang tertentu. Sekarang:
+> - Ada tombol baru **💬 Komen** di topbar tampilan publik (sejajar dengan
+>   Dashboard & Cari Data). Diklik akan membuka form dengan keterangan
+>   singkat bahwa form ini untuk mengirim saran/kritik/usulan ke
+>   Administrator.
+> - Form berisi 3 isian: **Nama**, **Nomor Kontak**, dan **Pesan**
+>   (textarea, dibatasi 1000 karakter termasuk spasi -- sama seperti batas
+>   komentar per-orang yang sudah ada). Ketiganya **wajib diisi**; kalau ada
+>   yang kosong, kiriman **tidak masuk** dan tampil pesan gagal yang
+>   menjelaskan datanya belum lengkap.
+> - Pakai lapis proteksi anti-spam yang sama seperti form komentar per-orang
+>   (honeypot, captcha hitung sederhana, jeda minimum sebelum kirim, jeda 15
+>   detik antar kirim).
+> - Kiriman masuk ke koleksi Firestore `comments` yang sama dengan komentar
+>   per-orang (field `orangId`-nya kosong/null supaya bisa dibedakan), jadi
+>   tetap tampil di tab **Komentar** (admin) seperti biasa -- ditandai
+>   **"💬 Saran/Kritik Umum untuk Admin"** dan nomor kontak pengirim ikut
+>   ditampilkan di kartunya. Alur baca/tandai-dibaca/hapus di admin tidak
+>   berubah.
+> - **Perlu publish ulang Firestore Rules** (lihat bagian `comments` di
+>   bawah) supaya field `kontak` yang baru divalidasi dengan benar di sisi
+>   server.
+
 > **Baru di versi ini (v21) -- Log Aktivitas admin & proteksi anti-spam komentar:**
 > 1. **Log Aktivitas (audit log) -- baru.** Sebelumnya tidak ada pencatatan
 >    sama sekali soal siapa mengubah data apa dan kapan -- penting begitu
@@ -374,6 +422,8 @@ service cloud.firestore {
         request.resource.data.isiKomentar is string &&
         request.resource.data.isiKomentar.size() > 0 &&
         request.resource.data.isiKomentar.size() <= 1000 &&
+        (!('kontak' in request.resource.data) ||
+          (request.resource.data.kontak is string && request.resource.data.kontak.size() <= 40)) &&
         request.resource.data.sudahDibaca == false;
       allow update, delete: if isAdmin();
     }

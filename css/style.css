@@ -181,6 +181,64 @@ body {
 .birthday-row { cursor: pointer; }
 .birthday-row:hover { background: var(--blue-pale); border-radius: 6px; }
 
+/* ---------- Menu utama publik (landing-menu) -- layar PERTAMA yang tampil
+   saat halaman dibuka, berisi semua menu level publik sebagai kotak-kotak
+   rapi di tengah layar. Menggantikan #view-chooser sebagai layar pertama
+   (view-chooser sekarang baru muncul setelah kotak "Tampilkan Silsilah"
+   diklik) & menggantikan #landing-hint versi lama sepenuhnya. z-index
+   sengaja di ANTARA topbar (40) & modal-overlay (100): supaya modal yang
+   dibuka langsung dari sini (Dashboard/Komen/Cari Data/Notifikasi) tampil
+   MENIMPA menu ini tanpa perlu disembunyikan dulu -- begitu modalnya
+   ditutup, menu ini otomatis terlihat lagi karena tidak pernah ikut
+   disembunyikan. ---------- */
+.landing-menu-overlay {
+  position: fixed; inset: 0;
+  background: linear-gradient(135deg, var(--blue-pale), var(--green-pale));
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  z-index: 90;
+}
+.landing-menu-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 32px 28px;
+  max-width: 560px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+.landing-menu-card h1 { margin: 0 0 6px; font-size: 21px; }
+.landing-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+.landing-menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 12px;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+.landing-menu-item:hover {
+  border-color: var(--blue-deep);
+  background: var(--blue-pale);
+  transform: translateY(-2px);
+}
+.landing-menu-icon { font-size: 26px; position: relative; line-height: 1; }
+.landing-menu-label { font-size: 13.5px; font-weight: 700; }
+
 /* ---------- Layar pilihan tampilan awal (Pohon vs Jelajah/Kartu) ---------- */
 .view-chooser-overlay {
   position: fixed; inset: 0;
@@ -225,21 +283,8 @@ body {
 }
 .chooser-close-btn:hover { background: var(--blue-pale); color: var(--blue-deep); }
 
-/* Ditampilkan di <main> saat tamu menutup layar pilihan awal lewat tombol
-   close di atas, tanpa memilih Pohon/Jelajah -- supaya area di bawah topbar
-   tidak kosong melompong dan tamu tetap diarahkan ke menu yang tersedia. */
-.landing-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  height: calc(100vh - var(--topbar-h));
-  text-align: center;
-  color: var(--text-muted);
-  padding: 20px;
-}
-.landing-hint p { margin: 0; font-size: 15px; max-width: 360px; }
+/* Catatan: #landing-hint (versi lama) sudah dihapus -- perannya digantikan
+   sepenuhnya oleh #landing-menu (menu utama publik, lihat di atas). */
 .view-chooser-options {
   display: flex;
   gap: 16px;
@@ -1097,6 +1142,7 @@ body.public-custom-bg {
 .comment-card.unread { border-left-color: var(--danger); }
 .comment-card-header { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .comment-card-target { color: var(--text-muted); font-size: 12px; }
+.comment-card-kontak { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); }
 .comment-card-text { margin: 8px 0; font-size: 14px; }
 .comment-card-footer { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted); }
 
@@ -1461,6 +1507,7 @@ h2, h3 { color: var(--text-main); }
   .admin-main { padding: 14px; }
   .dashboard-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
   .view-chooser-options { flex-direction: column; }
+  .landing-menu-grid { grid-template-columns: repeat(2, 1fr); }
   .tree-toolbar-float { left: 8px; right: 8px; top: 8px; }
   .tree-search-wrap { flex: 1 1 100%; }
   .search-box-float { width: 100%; min-width: 0; }
