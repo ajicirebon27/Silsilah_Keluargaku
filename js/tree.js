@@ -909,13 +909,21 @@ function renderTreeSVG(container, people, marriages, onNodeClick, rootIds) {
 
     const color = marriageColor.get(m.id) || DEFAULT_COLOR;
     const label = marriageLabel.get(m.id);
+    // Pernikahan yang ditandai admin sudah bercerai (lihat MarriageAPI.setStatus)
+    // digambar dgn garis putus-putus, BUKAN dihapus/diberi label mencolok di
+    // kotak nama -- supaya tetap sopan dilihat siapa pun (termasuk pasangan
+    // yg sekarang), tapi tetap jelas beda dari pernikahan yang masih utuh.
+    // Keterangan "Bercerai" hanya muncul lewat lencana kecil (hover/klik),
+    // tidak dipaksakan ke label utama.
+    const isCerai = m.status === 'cerai';
+    const dash = isCerai ? ' stroke-dasharray="6,4"' : '';
 
     // Kasus orang tua tunggal (ayah/ibu yang lain belum diketahui)
     if (!m.orangId2 || !p2 || p1.y !== p2.y) {
       const midX = p1.x + NODE_W / 2;
       const bottomY = p1.y + NODE_H;
       const stubY = bottomY + STUB;
-      svg += `<line x1="${midX}" y1="${bottomY}" x2="${midX}" y2="${stubY}" stroke="${color}" stroke-width="2.5" />`;
+      svg += `<line x1="${midX}" y1="${bottomY}" x2="${midX}" y2="${stubY}" stroke="${color}" stroke-width="2.5"${dash} />`;
       if (m.childIds && m.childIds.length) {
         const childXs = m.childIds.map(cid => positions.get(cid)).filter(Boolean).map(p => p.x + NODE_W / 2);
         if (childXs.length) {
@@ -951,14 +959,30 @@ function renderTreeSVG(container, people, marriages, onNodeClick, rootIds) {
     const wifeX = wifePos.x + NODE_W / 2;
     const elbowY = rowBottomY + STUB + depth * STUB_STEP;
 
-    svg += `<line x1="${hubX}" y1="${rowBottomY}" x2="${hubX}" y2="${elbowY}" stroke="${color}" stroke-width="2.5" />`;
-    svg += `<line x1="${hubX}" y1="${elbowY}" x2="${wifeX}" y2="${elbowY}" stroke="${color}" stroke-width="2.5" />`;
-    svg += `<line x1="${wifeX}" y1="${elbowY}" x2="${wifeX}" y2="${rowBottomY}" stroke="${color}" stroke-width="2.5" />`;
+    svg += `<line x1="${hubX}" y1="${rowBottomY}" x2="${hubX}" y2="${elbowY}" stroke="${color}" stroke-width="2.5"${dash} />`;
+    svg += `<line x1="${hubX}" y1="${elbowY}" x2="${wifeX}" y2="${elbowY}" stroke="${color}" stroke-width="2.5"${dash} />`;
+    svg += `<line x1="${wifeX}" y1="${elbowY}" x2="${wifeX}" y2="${rowBottomY}" stroke="${color}" stroke-width="2.5"${dash} />`;
     svg += `<circle cx="${wifeX}" cy="${rowBottomY}" r="3" fill="${color}" />`;
     svg += `<circle cx="${hubX}" cy="${rowBottomY}" r="3" fill="${color}" />`;
     const midX = (hubX + wifeX) / 2;
     if (label) {
       svg += `<text x="${midX + 6}" y="${elbowY - 6}" class="marriage-label" fill="${color}">${label}</text>`;
+    }
+    // Lencana kecil "bercerai": ikon 2 cincin TERPISAH (bukan simbol hati
+    // patah/emoji lain yang berkonotasi emosional) + <title> (tooltip saat
+    // hover di desktop) DAN class marriage-status-badge yang diberi handler
+    // klik di bawah (utk perangkat sentuh/mobile yang tidak punya hover)
+    // supaya keterangan "Bercerai" selalu bisa diakses siapa pun secara netral.
+    if (isCerai) {
+      const badgeCx = midX;
+      const badgeCy = elbowY;
+      svg += `
+        <g class="marriage-status-badge" data-marriage-status-id="${m.id}" transform="translate(${badgeCx},${badgeCy})" style="cursor:pointer" role="button" tabindex="0" aria-label="Status pernikahan: Bercerai">
+          <title>Status pernikahan: Bercerai</title>
+          <circle r="10" class="marriage-status-badge-circle" />
+          <circle cx="-3.2" cy="0" r="3.4" class="marriage-status-badge-ring" />
+          <circle cx="3.2" cy="0" r="3.4" class="marriage-status-badge-ring" />
+        </g>`;
     }
 
     if (m.childIds && m.childIds.length) {
@@ -1061,6 +1085,20 @@ function renderTreeSVG(container, people, marriages, onNodeClick, rootIds) {
         e.stopPropagation();
         toggleTreeNode(container, toggle.dataset.toggleId);
       }
+    });
+  });
+  // Lencana "Bercerai" (ikon 2 cincin terpisah): <title> sudah menampilkan tooltip saat hover di
+  // desktop, tapi HP/tablet tidak punya hover -- klik/tap di sini menampilkan
+  // keterangan yang sama lewat alert() sederhana, supaya info tetap sampai
+  // di perangkat sentuh tanpa membuat lencananya jadi tombol edit/hapus.
+  container.querySelectorAll('.marriage-status-badge').forEach(badge => {
+    const showInfo = (e) => {
+      e.stopPropagation();
+      alert('Status pernikahan: Bercerai');
+    };
+    badge.addEventListener('click', showInfo);
+    badge.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInfo(e); }
     });
   });
 }

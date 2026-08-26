@@ -476,6 +476,10 @@ body {
 .marriage-line { stroke: var(--blue-deep); stroke-width: 2; }
 .child-line { stroke: var(--green-deep); stroke-width: 2; }
 .marriage-label { font-size: 10px; font-weight: 600; }
+.marriage-status-badge-circle { fill: #f2f2f2; stroke: #9a9a9a; stroke-width: 1.5; }
+.marriage-status-badge-ring { fill: none; stroke: #7a7a7a; stroke-width: 1.6; }
+.marriage-status-badge:hover .marriage-status-badge-circle { fill: #e6e6e6; }
+.marriage-status-badge:focus-visible .marriage-status-badge-circle { stroke: var(--blue-soft, #4F7CAC); stroke-width: 2; }
 
 .node-rect { fill: var(--surface); stroke-width: 1.5; transition: filter 0.15s var(--ease); filter: drop-shadow(0 1px 3px rgba(32,43,54,0.08)); }
 .node-male .node-rect { stroke: var(--blue-deep); }
@@ -1131,6 +1135,10 @@ body.public-custom-bg {
 .relation-chip button { background: none; border: none; color: var(--blue-deep); cursor: pointer; font-weight: bold; }
 .btn-reorder { background: none; border: 1px solid var(--blue-deep); border-radius: 4px; color: var(--blue-deep); cursor: pointer; font-weight: bold; font-size: 11px; line-height: 1; padding: 2px 5px; margin: 0 1px; }
 .btn-reorder:hover { background: var(--blue-deep); color: #fff; }
+.btn-status { background: none; border: 1px solid #999; border-radius: 4px; color: #666; cursor: pointer; font-size: 11px; line-height: 1; padding: 2px 6px; margin: 0 3px; }
+.btn-status:hover { background: #eee; }
+.btn-status-cerai { border-color: #7a7a7a; color: #555; background: #eeeeee; }
+.btn-status-cerai:hover { background: #e2e2e2; }
 .relasi-anak-group { margin-bottom: 12px; }
 .relasi-anak-group-label { font-size: 12.5px; color: var(--text-muted); margin: 0 0 6px 0; font-weight: 600; }
 .add-relation-row { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }

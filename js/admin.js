@@ -1050,7 +1050,20 @@ function renderPasanganSection(person) {
       ? `<button type="button" class="btn-reorder" title="Naikkan urutan" onclick="movePasanganUp('${person.id}','${m.id}')">&uarr;</button>` : '';
     const downBtn = isPoly && idx < myMarriages.length - 1
       ? `<button type="button" class="btn-reorder" title="Turunkan urutan" onclick="movePasanganDown('${person.id}','${m.id}')">&darr;</button>` : '';
+    // Tombol status cerai: TIDAK menghapus relasi/anak, cuma menandai di
+    // pohon (garis putus-putus + lencana 2-cincin-terpisah) supaya kasus
+    // poligami yg salah satu pasangannya sudah berpisah (tapi keduanya
+    // masih hidup) tidak tampak seolah masih menikah -- lihat MarriageAPI.setStatus().
+    // Sengaja pakai LABEL TEKS saja (bukan emoji spt hati patah) supaya netral
+    // & tidak berkesan menghakimi bagi siapa pun yg membaca data ini.
+    // Sengaja TIDAK ada status default selain "menikah/tidak diketahui"
+    // supaya admin yg tidak tahu status pernikahan lama tidak perlu isi apa-apa.
+    const isCerai = m.status === 'cerai';
+    const statusBtn = `<button type="button" class="btn-status ${isCerai ? 'btn-status-cerai' : ''}"
+      title="${isCerai ? 'Sudah ditandai bercerai -- klik utk batalkan tanda' : 'Tandai pasangan ini sudah bercerai'}"
+      onclick="togglePasanganStatus('${m.id}')">${isCerai ? 'Berstatus: Cerai' : 'Tandai Cerai'}</button>`;
     return `<div class="relation-chip">${orderLabel} ${escapeHtml(partner ? partner.nama : '(tidak diketahui)')}
+      ${statusBtn}
       ${upBtn}${downBtn}
       <button type="button" onclick="removePasangan('${m.id}')">&times;</button></div>`;
   }).join('') || '<p class="empty-row-sm">Belum ada pasangan tercatat.</p>';
@@ -1092,6 +1105,22 @@ async function addPasanganForSelected() {
   await MarriageAPI.findOrCreate(ayahId, ibuId, allMarriages);
   AuditLogAPI.log('add_pasangan', { label: `${person.nama} & ${partner.nama}` });
 
+  await refreshRelasiData();
+}
+
+async function togglePasanganStatus(marriageId) {
+  const m = allMarriages.find(x => x.id === marriageId);
+  if (!m) return;
+  const partnerA = allPeople.find(p => p.id === m.orangId1);
+  const partnerB = allPeople.find(p => p.id === m.orangId2);
+  const label = [partnerA, partnerB].filter(Boolean).map(p => p.nama).join(' & ') || marriageId;
+  const nextStatus = m.status === 'cerai' ? null : 'cerai';
+  if (nextStatus === 'cerai') {
+    const ok = confirm(`Tandai pernikahan ${label} sebagai sudah bercerai?\n\nData pernikahan & anak-anaknya tetap tersimpan, hanya akan ditandai secara netral di pohon (garis putus-putus + lencana kecil) supaya tidak terlihat seolah masih menikah.`);
+    if (!ok) return;
+  }
+  await MarriageAPI.setStatus(marriageId, nextStatus);
+  AuditLogAPI.log(nextStatus === 'cerai' ? 'mark_cerai' : 'unmark_cerai', { label });
   await refreshRelasiData();
 }
 
@@ -1666,6 +1695,8 @@ const AUDIT_ACTION_LABELS = {
   hard_delete_person: { icon: '❌', text: 'Menghapus orang secara permanen' },
   add_pasangan: { icon: '💍', text: 'Menambah relasi pasangan' },
   remove_pasangan: { icon: '💔', text: 'Menghapus relasi pasangan' },
+  mark_cerai: { icon: '•', text: 'Menandai pasangan sudah bercerai' },
+  unmark_cerai: { icon: '•', text: 'Membatalkan tanda bercerai' },
   set_ortu: { icon: '👪', text: 'Mengatur relasi orang tua' },
   delete_comment: { icon: '🗑️', text: 'Menghapus komentar' },
   update_settings: { icon: '⚙️', text: 'Mengubah pengaturan aplikasi' },

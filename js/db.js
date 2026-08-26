@@ -438,6 +438,18 @@ const MarriageAPI = {
   async delete(id) {
     await db.collection('marriages').doc(id).delete();
   },
+  // Tandai/batalkan status "sudah bercerai" pada 1 pernikahan tanpa
+  // menghapus data pernikahan/anaknya. Dipakai utk kasus poligami di mana
+  // 1 pasangan sudah berpisah tapi pasangan lain (atau mantan itu sendiri)
+  // masih hidup -- supaya pohon tidak menampilkan seolah keduanya masih
+  // menikah, tanpa perlu menghapus riwayat pernikahannya.
+  // status: 'cerai' utk menandai, atau null utk membatalkan tanda (kembali
+  // dianggap menikah / status tidak diketahui -- TIDAK ada tanda apa pun
+  // di pohon, supaya admin yang memang tidak tahu status pasangan lama
+  // tidak wajib mengisi apa-apa).
+  async setStatus(marriageId, status) {
+    await db.collection('marriages').doc(marriageId).update({ status: status || null });
+  },
   async addChild(marriageId, childId) {
     await db.collection('marriages').doc(marriageId).update({
       childIds: firebase.firestore.FieldValue.arrayUnion(childId)

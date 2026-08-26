@@ -485,12 +485,16 @@ function openDetail(personId) {
   const p = allPeople.find(x => x.id === personId);
   if (!p) return;
 
+  // Tambahan "(bercerai)" hanya kalau admin sudah menandai pernikahan itu
+  // lewat MarriageAPI.setStatus -- kalau tidak diisi (admin tidak tahu),
+  // tampil polos seperti biasa tanpa keterangan apa pun.
   const pasangan = allMarriages
     .filter(m => m.orangId1 === personId || m.orangId2 === personId)
     .map(m => {
       const partnerId = m.orangId1 === personId ? m.orangId2 : m.orangId1;
       const partner = allPeople.find(x => x.id === partnerId);
-      return partner ? partner.nama : null;
+      if (!partner) return null;
+      return m.status === 'cerai' ? `${partner.nama} (bercerai)` : partner.nama;
     }).filter(Boolean);
 
   const anak = allMarriages
