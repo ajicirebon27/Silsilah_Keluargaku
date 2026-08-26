@@ -971,7 +971,13 @@ function wrapNodeName(nama, maxWidth = NODE_W - NODE_TEXT_PADDING * 2, maxLines 
 // tampilannya tidak berubah sama sekali, cuma yg namanya panjang saja yg
 // kotaknya melebar mengikuti teks.
 function computeNodeH(maxNameLines) {
-  const nameBlockTopY = 26 - (maxNameLines - 1) * (NODE_LINE_HEIGHT / 2);
+  // Jarak dari tepi atas kotak ke baseline baris nama PERTAMA dibuat TETAP
+  // (tidak lagi menyusut mengikuti jumlah baris spt versi sebelumnya) --
+  // supaya nama 2-3 baris tidak "naik" dan mepet ke garis atas kotak.
+  // Konsekuensinya kotak jadi bertambah tinggi lebih banyak per baris
+  // tambahan, tapi jarak teks ke tepi atas & bawah tetap proporsional utk
+  // semua jumlah baris (persis spt kasus 1 baris yg sudah nyaman).
+  const nameBlockTopY = 26;
   const lastNameLineY = nameBlockTopY + (maxNameLines - 1) * NODE_LINE_HEIGHT;
   const subY = lastNameLineY + 18;
   return { height: subY + 20, nameBlockTopY, subY };
