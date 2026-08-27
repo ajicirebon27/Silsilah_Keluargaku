@@ -1517,6 +1517,9 @@ function setupPhoneBookTab() {
 
   const btnExport = document.getElementById('btn-telepon-export-csv');
   if (btnExport) btnExport.addEventListener('click', exportPhoneBookCSV);
+
+  const btnExportExcel = document.getElementById('btn-telepon-export-excel');
+  if (btnExportExcel) btnExportExcel.addEventListener('click', exportPhoneBookExcel);
 }
 
 function isTeleponFilterActive() {
@@ -1648,6 +1651,29 @@ function exportPhoneBookCSV() {
   a.download = `buku-telepon-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// Unduh rekap yang sama (Nama/Jenis Kelamin/No. HP/Alamat) sebagai file
+// Excel (.xlsx) asli -- mengikuti SELURUH data hasil pencarian & filter yang
+// sedang aktif (bukan cuma 1 halaman yang sedang tampil di layar), sama
+// persis cakupannya dengan tombol "Unduh CSV". Pakai library SheetJS (sudah
+// dimuat lewat CDN di admin.html) supaya file benar-benar format .xlsx,
+// bukan CSV yang diganti namanya.
+function exportPhoneBookExcel() {
+  if (typeof XLSX === 'undefined') {
+    alert('Gagal memuat komponen Excel. Pastikan koneksi internet aktif lalu coba lagi.');
+    return;
+  }
+  const rows = getPhoneBookRows();
+  const data = [
+    ['Nama', 'Jenis Kelamin', 'No. HP / Kontak', 'Alamat'],
+    ...rows.map(p => [p.nama || '', p.jenisKelamin || '', p.kontak || '', p.alamat || ''])
+  ];
+  const sheet = XLSX.utils.aoa_to_sheet(data);
+  sheet['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 18 }, { wch: 40 }];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Buku Telepon');
+  XLSX.writeFile(workbook, `buku-telepon-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 // ======================================================================

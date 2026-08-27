@@ -13,7 +13,7 @@
 // placeholder generik ke desain "pohon silsilah" (lihat manifest.json &
 // index.html/admin.html <link rel="icon">/<link rel="apple-touch-icon">).
 // Tanpa masuk daftar ini, ikon baru gagal tampil saat app dibuka offline.
-const CACHE_NAME = 'silsilah-cache-v12';
+const CACHE_NAME = 'silsilah-cache-v13';
 const ASSETS = [
   './',
   './index.html',
