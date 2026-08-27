@@ -53,6 +53,7 @@
     <nav class="admin-nav">
       <button class="nav-btn active" data-tab="tab-dashboard">Dashboard</button>
       <button class="nav-btn" data-tab="tab-orang">Data Orang</button>
+      <button class="nav-btn" data-tab="tab-telepon">Buku Telepon</button>
       <button class="nav-btn" data-tab="tab-laporan">Laporan</button>
       <button class="nav-btn" data-tab="tab-komentar">
         Komentar <span id="badge-komentar" class="badge" style="display:none">0</span>
@@ -208,6 +209,64 @@
         <tbody id="people-table-body"></tbody>
       </table>
       <div id="people-pagination" class="pagination-wrap"></div>
+    </section>
+
+    <!-- TAB: BUKU TELEPON (rekap Nama + No. HP/Kontak + Alamat) -->
+    <section id="tab-telepon" class="tab-panel">
+      <div class="panel-header">
+        <input type="text" id="telepon-search" placeholder="Cari nama, No. HP, atau alamat...">
+        <button type="button" id="btn-toggle-telepon-filter" class="btn-secondary adv-filter-toggle-btn">
+          Filter <span id="telepon-filter-count-badge" class="adv-filter-count-badge" style="display:none"></span>
+        </button>
+        <button type="button" id="btn-telepon-export-csv" class="btn-secondary">Unduh CSV</button>
+      </div>
+
+      <div id="telepon-filter-panel" class="adv-filter-panel" style="display:none">
+        <div class="adv-filter-row">
+          <div class="adv-filter-field">
+            <label for="telepon-filter-gender">Jenis Kelamin</label>
+            <select id="telepon-filter-gender">
+              <option value="all">Semua</option>
+              <option value="Laki-laki">Laki-laki</option>
+              <option value="Perempuan">Perempuan</option>
+            </select>
+          </div>
+          <div class="adv-filter-field">
+            <label for="telepon-filter-agama">Agama</label>
+            <select id="telepon-filter-agama">
+              <option value="all">Semua Agama</option>
+              <option value="Islam">Islam</option>
+              <option value="Kristen">Kristen</option>
+              <option value="Katolik">Katolik</option>
+              <option value="Hindu">Hindu</option>
+              <option value="Buddha">Buddha</option>
+              <option value="Konghucu">Konghucu</option>
+              <option value="Lainnya">Lainnya</option>
+              <option value="__kosong__">Belum Diisi</option>
+            </select>
+          </div>
+          <div class="adv-filter-field">
+            <label for="telepon-filter-kelengkapan">Kelengkapan Data</label>
+            <select id="telepon-filter-kelengkapan">
+              <option value="all">Semua Data</option>
+              <option value="ada_hp">Sudah Ada No. HP</option>
+              <option value="belum_hp">Belum Ada No. HP</option>
+              <option value="ada_alamat">Sudah Ada Alamat</option>
+              <option value="belum_alamat">Belum Ada Alamat</option>
+            </select>
+          </div>
+          <button type="button" id="btn-reset-telepon-filter" class="btn-link adv-filter-reset-btn">Reset Filter</button>
+        </div>
+      </div>
+
+      <p class="setting-hint">Rekap Nama, Nomor HP/Kontak, dan Alamat seluruh anggota keluarga yang datanya sudah tercatat -- diambil langsung dari field "Kontak" &amp; "Alamat/Domisili" di biodata masing-masing orang (tab Data Orang), jadi tidak perlu diisi ulang di sini. Klik nama untuk membuka/melengkapi datanya kalau masih kosong.</p>
+      <table class="admin-table">
+        <thead><tr>
+          <th>Nama</th><th>Jenis Kelamin</th><th>No. HP / Kontak</th><th>Alamat</th>
+        </tr></thead>
+        <tbody id="telepon-table-body"></tbody>
+      </table>
+      <div id="telepon-pagination" class="pagination-wrap"></div>
     </section>
 
     <!-- TAB: LAPORAN -->

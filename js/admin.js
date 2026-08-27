@@ -178,6 +178,7 @@ async function bootAdmin() {
   setupBirthdayModal();
   setupAdminViewSwitch();
   setupAuditLogTab();
+  setupPhoneBookTab();
   await refreshAll();
   await refreshCommentBadge();
   await refreshTrashBadge();
@@ -196,6 +197,7 @@ async function refreshAll() {
   personGenerationMap = RelationRules.getGenerationMap(allPeople, allMarriages);
   refreshGenerasiFilterOptions();
   renderPeopleTable();
+  renderPhoneBook();
   const adminTreeContainer = document.getElementById('admin-tree-container');
   // Admin menampilkan SEMUA keluarga sekaligus (tdk difilter spt publik) --
   // rootIds dikirim supaya keluarga lain yg tdk berkerabat dgn pasangan
@@ -291,6 +293,7 @@ function setupTabs() {
       if (btn.dataset.tab === 'tab-sampah') renderTrash();
       if (btn.dataset.tab === 'tab-dashboard') renderAdminDashboard();
       if (btn.dataset.tab === 'tab-log') renderAuditLog(true);
+      if (btn.dataset.tab === 'tab-telepon') renderPhoneBook();
     });
   });
 }
@@ -1432,10 +1435,219 @@ async function autoSortAnakByTglLahir(marriageId) {
 async function refreshRelasiData() {
   [allPeople, allMarriages] = await Promise.all([PeopleAPI.getAll(), MarriageAPI.getAll()]);
   renderPeopleTable();
+  renderPhoneBook();
   const relasiRootIds = RelationRules.findDefaultTreeRootIds(allPeople, allMarriages, cachedAppSettings.rootPersonId);
   renderTreeSVG(document.getElementById('admin-tree-container'), allPeople, allMarriages, openEditPerson, relasiRootIds);
   if (relasiSelectedId) renderRelasiDetail();
   if (laporanSelectedId) renderLaporanDetail();
+}
+
+// ======================================================================
+// TAB: BUKU TELEPON (rekap Nama + No. HP/Kontak + Alamat, diambil langsung
+// dari data biodata orang yang sudah ada di tab Data Orang -- field
+// `kontak` & `alamat` -- jadi tidak ada penyimpanan data baru sama sekali,
+// murni tampilan rekap + pencarian + unduh CSV.)
+// ======================================================================
+
+let currentTeleponFilter = '';
+let currentTeleponGenderFilter = 'all';
+let currentTeleponAgamaFilter = 'all';
+let currentTeleponKelengkapanFilter = 'all';
+const TELEPON_PAGE_SIZE = 20;
+let currentTeleponPage = 1;
+
+function setupPhoneBookTab() {
+  const searchInput = document.getElementById('telepon-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      currentTeleponFilter = searchInput.value;
+      currentTeleponPage = 1;
+      renderPhoneBook();
+    });
+  }
+
+  const btnToggleFilter = document.getElementById('btn-toggle-telepon-filter');
+  const filterPanel = document.getElementById('telepon-filter-panel');
+  if (btnToggleFilter && filterPanel) {
+    btnToggleFilter.addEventListener('click', () => {
+      filterPanel.style.display = filterPanel.style.display === 'none' ? 'block' : 'none';
+    });
+  }
+
+  const genderSelect = document.getElementById('telepon-filter-gender');
+  if (genderSelect) {
+    genderSelect.addEventListener('change', () => {
+      currentTeleponGenderFilter = genderSelect.value;
+      currentTeleponPage = 1;
+      renderPhoneBook();
+    });
+  }
+
+  const agamaSelect = document.getElementById('telepon-filter-agama');
+  if (agamaSelect) {
+    agamaSelect.addEventListener('change', () => {
+      currentTeleponAgamaFilter = agamaSelect.value;
+      currentTeleponPage = 1;
+      renderPhoneBook();
+    });
+  }
+
+  const kelengkapanSelect = document.getElementById('telepon-filter-kelengkapan');
+  if (kelengkapanSelect) {
+    kelengkapanSelect.addEventListener('change', () => {
+      currentTeleponKelengkapanFilter = kelengkapanSelect.value;
+      currentTeleponPage = 1;
+      renderPhoneBook();
+    });
+  }
+
+  const btnReset = document.getElementById('btn-reset-telepon-filter');
+  if (btnReset) {
+    btnReset.addEventListener('click', () => {
+      currentTeleponGenderFilter = 'all';
+      currentTeleponAgamaFilter = 'all';
+      currentTeleponKelengkapanFilter = 'all';
+      if (genderSelect) genderSelect.value = 'all';
+      if (agamaSelect) agamaSelect.value = 'all';
+      if (kelengkapanSelect) kelengkapanSelect.value = 'all';
+      currentTeleponPage = 1;
+      renderPhoneBook();
+    });
+  }
+
+  const btnExport = document.getElementById('btn-telepon-export-csv');
+  if (btnExport) btnExport.addEventListener('click', exportPhoneBookCSV);
+}
+
+function isTeleponFilterActive() {
+  return currentTeleponGenderFilter !== 'all' || currentTeleponAgamaFilter !== 'all' ||
+    currentTeleponKelengkapanFilter !== 'all';
+}
+
+function matchesTeleponFilter(p) {
+  if (currentTeleponGenderFilter !== 'all' && p.jenisKelamin !== currentTeleponGenderFilter) return false;
+  if (currentTeleponAgamaFilter !== 'all') {
+    if (currentTeleponAgamaFilter === '__kosong__') {
+      if (p.agama) return false;
+    } else if (p.agama !== currentTeleponAgamaFilter) {
+      return false;
+    }
+  }
+  if (currentTeleponKelengkapanFilter === 'ada_hp' && !p.kontak) return false;
+  if (currentTeleponKelengkapanFilter === 'belum_hp' && p.kontak) return false;
+  if (currentTeleponKelengkapanFilter === 'ada_alamat' && !p.alamat) return false;
+  if (currentTeleponKelengkapanFilter === 'belum_alamat' && p.alamat) return false;
+  return true;
+}
+
+// Seluruh data yang cocok dgn pencarian + filter (semua halaman) -- dipakai
+// bareng oleh render tabel (yang lalu dipotong per halaman) dan ekspor CSV
+// (yang perlu SEMUA baris hasil filter, bukan cuma yang sedang tampil).
+function getPhoneBookRows(filter = currentTeleponFilter) {
+  const q = (filter || '').trim().toLowerCase();
+  return allPeople
+    .filter(p => {
+      if (q && !(
+        (p.nama || '').toLowerCase().includes(q) ||
+        (p.kontak || '').toLowerCase().includes(q) ||
+        (p.alamat || '').toLowerCase().includes(q)
+      )) return false;
+      return matchesTeleponFilter(p);
+    })
+    .slice()
+    .sort((a, b) => (a.nama || '').localeCompare(b.nama || '', 'id'));
+}
+
+function renderPhoneBook(filter = currentTeleponFilter) {
+  const tbody = document.getElementById('telepon-table-body');
+  if (!tbody) return;
+
+  const badge = document.getElementById('telepon-filter-count-badge');
+  if (badge) {
+    const n = [
+      currentTeleponGenderFilter !== 'all',
+      currentTeleponAgamaFilter !== 'all',
+      currentTeleponKelengkapanFilter !== 'all'
+    ].filter(Boolean).length;
+    badge.style.display = n > 0 ? 'inline-block' : 'none';
+    badge.textContent = n;
+  }
+
+  const filtered = getPhoneBookRows(filter);
+  const totalCount = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / TELEPON_PAGE_SIZE));
+  if (currentTeleponPage > totalPages) currentTeleponPage = totalPages;
+  if (currentTeleponPage < 1) currentTeleponPage = 1;
+  const startIdx = (currentTeleponPage - 1) * TELEPON_PAGE_SIZE;
+  const rows = filtered.slice(startIdx, startIdx + TELEPON_PAGE_SIZE);
+
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-row">Tidak ada data yang cocok.</td></tr>`;
+  } else {
+    tbody.innerHTML = rows.map(p => `
+      <tr>
+        <td><a href="#" class="btn-link" onclick="openEditPerson('${p.id}');return false;">${escapeHtml(p.nama)}</a></td>
+        <td>${p.jenisKelamin ? escapeHtml(p.jenisKelamin) : '<span class="empty-row-sm">-</span>'}</td>
+        <td>${p.kontak ? escapeHtml(p.kontak) : '<span class="empty-row-sm">-</span>'}</td>
+        <td>${p.alamat ? escapeHtml(p.alamat) : '<span class="empty-row-sm">-</span>'}</td>
+      </tr>
+    `).join('');
+  }
+
+  renderTeleponPagination(totalCount, totalPages);
+}
+
+function renderTeleponPagination(totalCount, totalPages) {
+  const container = document.getElementById('telepon-pagination');
+  if (!container) return;
+
+  const startItem = totalCount === 0 ? 0 : (currentTeleponPage - 1) * TELEPON_PAGE_SIZE + 1;
+  const endItem = Math.min(currentTeleponPage * TELEPON_PAGE_SIZE, totalCount);
+
+  let pageButtons = '';
+  for (let i = 1; i <= totalPages; i++) {
+    pageButtons += `<button class="page-btn ${i === currentTeleponPage ? 'active' : ''}" onclick="goToTeleponPage(${i})">${i}</button>`;
+  }
+
+  container.innerHTML = `
+    <div class="pagination-info">Menampilkan ${startItem}-${endItem} dari ${totalCount} data</div>
+    ${totalPages > 1 ? `
+    <div class="pagination-controls">
+      <button class="page-btn" onclick="goToTeleponPage(${currentTeleponPage - 1})" ${currentTeleponPage === 1 ? 'disabled' : ''}>&laquo;</button>
+      ${pageButtons}
+      <button class="page-btn" onclick="goToTeleponPage(${currentTeleponPage + 1})" ${currentTeleponPage === totalPages ? 'disabled' : ''}>&raquo;</button>
+    </div>` : ''}
+  `;
+}
+
+function goToTeleponPage(page) {
+  currentTeleponPage = page;
+  renderPhoneBook();
+}
+
+// Unduh rekap Nama/Jenis Kelamin/No. HP/Alamat yang cocok dgn pencarian &
+// filter yang sedang aktif -- SELURUH data hasil filter (bukan cuma
+// halaman yang sedang tampil) -- sebagai file CSV. Bisa dibuka di
+// Excel/Google Sheets, atau diimpor ke aplikasi kontak HP.
+function exportPhoneBookCSV() {
+  const rows = getPhoneBookRows();
+  const csvEscape = v => {
+    const s = (v || '').replace(/"/g, '""');
+    return `"${s}"`;
+  };
+  const lines = [
+    ['Nama', 'Jenis Kelamin', 'No. HP / Kontak', 'Alamat'].map(csvEscape).join(','),
+    ...rows.map(p => [p.nama, p.jenisKelamin, p.kontak, p.alamat].map(csvEscape).join(','))
+  ];
+  // \ufeff (BOM) supaya karakter non-ASCII (mis. nama dgn aksen) tetap
+  // terbaca benar saat file dibuka langsung di Excel.
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `buku-telepon-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ======================================================================
