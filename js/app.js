@@ -461,6 +461,47 @@ function setupLandingMenu() {
       if (themeBtn) themeBtn.click();
     });
   }
+
+  const btnMenuKeluar = document.getElementById('menu-keluar');
+  if (btnMenuKeluar) btnMenuKeluar.addEventListener('click', handleExitApp);
+
+  setupExitScreen();
+}
+
+// =====================================================================
+// KELUAR DARI APLIKASI (#menu-keluar di landing menu publik)
+// Browser modern (demi keamanan) TIDAK mengizinkan tab yang dibuka manual
+// oleh pengguna ditutup lewat window.close() dari JavaScript -- itu hanya
+// berhasil untuk jendela/tab yang sebelumnya dibuka oleh script (mis. lewat
+// window.open()). Karena aplikasi ini bisa dibuka sebagai tab browser biasa
+// ATAU sebagai PWA yang di-install (di mana window.close() sering berhasil),
+// handleExitApp() mencoba window.close() dulu, lalu tetap menampilkan
+// #exit-screen sebagai jalan keluar yang konsisten di semua kondisi: kalau
+// window.close() berhasil, tab langsung tertutup duluan; kalau tidak,
+// pengguna melihat layar ini dan tinggal menutup tab secara manual.
+// =====================================================================
+function handleExitApp() {
+  const ok = confirm('Yakin ingin keluar dari aplikasi Silsilah Keluarga?');
+  if (!ok) return;
+
+  try { window.close(); } catch (e) { /* diabaikan, browser mungkin memblokirnya */ }
+
+  const landingMenu = document.getElementById('landing-menu');
+  const exitScreen = document.getElementById('exit-screen');
+  if (landingMenu) landingMenu.style.display = 'none';
+  if (exitScreen) exitScreen.style.display = 'flex';
+}
+
+function setupExitScreen() {
+  const exitScreen = document.getElementById('exit-screen');
+  const btnKembali = document.getElementById('exit-screen-kembali');
+  if (!exitScreen || !btnKembali) return;
+
+  btnKembali.addEventListener('click', () => {
+    exitScreen.style.display = 'none';
+    const landingMenu = document.getElementById('landing-menu');
+    if (landingMenu) landingMenu.style.display = 'flex';
+  });
 }
 
 // ---------- Modal detail ----------

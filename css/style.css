@@ -239,6 +239,37 @@ body {
 .landing-menu-icon { font-size: 26px; position: relative; line-height: 1; }
 .landing-menu-label { font-size: 13.5px; font-weight: 700; }
 
+/* Tombol "Keluar" dibuat beraksen merah supaya terlihat berbeda dari menu
+   lain (aksi keluar sifatnya berbeda dari menu navigasi biasa). */
+.landing-menu-item-exit { border-color: var(--red, #dc3545); }
+.landing-menu-item-exit:hover {
+  border-color: var(--red, #dc3545);
+  background: rgba(220, 53, 69, 0.08);
+}
+.landing-menu-item-exit .landing-menu-label { color: var(--red, #dc3545); }
+
+/* ---------- Layar setelah tombol Keluar ditekan ---------- */
+.exit-screen-overlay {
+  position: fixed; inset: 0;
+  background: linear-gradient(135deg, var(--blue-pale), var(--green-pale));
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  z-index: 999;
+}
+.exit-screen-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 36px 28px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+.exit-screen-icon { font-size: 40px; display: block; margin-bottom: 10px; }
+.exit-screen-card h2 { margin: 0 0 10px; }
+.exit-screen-card p { margin: 0 0 8px; }
+.exit-screen-card .btn-primary { margin-top: 14px; }
+
 /* ---------- Layar pilihan tampilan awal (Pohon vs Jelajah/Kartu) ---------- */
 .view-chooser-overlay {
   position: fixed; inset: 0;

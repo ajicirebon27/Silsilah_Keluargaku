@@ -84,6 +84,10 @@
         <span class="landing-menu-icon">🌓</span>
         <span class="landing-menu-label">Ganti Tema</span>
       </button>
+      <button id="menu-keluar" class="landing-menu-item landing-menu-item-exit" type="button" title="Keluar dari aplikasi">
+        <span class="landing-menu-icon">🚪</span>
+        <span class="landing-menu-label">Keluar</span>
+      </button>
     </div>
   </div>
 </div>
@@ -291,6 +295,22 @@
       <button type="submit" class="btn-primary">Kirim ke Admin</button>
     </form>
     <div id="komentar-umum-feedback" class="comment-feedback"></div>
+  </div>
+</div>
+
+<!-- Layar setelah tombol "Keluar" ditekan. Browser modern tidak mengizinkan
+     tab yang dibuka manual oleh pengguna ditutup lewat JavaScript (window.close()
+     hanya berhasil untuk tab/jendela yang dibuka oleh script), jadi sebagai
+     jalan keluar yang aman di semua browser, layar ini menimpa seluruh
+     halaman dan mempersilakan pengguna menutup tab/aplikasinya sendiri.
+     Lihat handleExitApp() di js/app.js. -->
+<div id="exit-screen" class="exit-screen-overlay" style="display:none">
+  <div class="exit-screen-card">
+    <span class="exit-screen-icon">👋</span>
+    <h2>Sampai Jumpa</h2>
+    <p>Anda telah keluar dari aplikasi Silsilah Keluarga.</p>
+    <p class="comment-hint">Silakan tutup tab/jendela ini, atau tekan tombol di bawah untuk kembali.</p>
+    <button id="exit-screen-kembali" class="btn-primary" type="button">Kembali ke Aplikasi</button>
   </div>
 </div>
 
